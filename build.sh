@@ -5,8 +5,8 @@
 
 set -e
 
-BINARY_NAME="odata-mcp"
-MAIN_PATH="cmd/odata-mcp/main.go"
+BINARY_NAME="sap-odata-mcp-universal"
+MAIN_PATH="cmd/sap-odata-mcp-universal/main.go"
 VERSION=${VERSION:-"1.0.0"}
 BUILD_DIR="build"
 

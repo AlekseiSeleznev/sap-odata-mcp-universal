@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/zmcp/odata-mcp/internal/client"
 )
 
 // TestEntityKeyPredicate tests proper key predicate formatting for entity retrieval

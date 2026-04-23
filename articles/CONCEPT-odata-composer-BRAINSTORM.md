@@ -379,7 +379,7 @@ Join: Orders ⋈ Customers ⋈ Tickets
 - [ ] Single-service queries
 - [ ] Basic aggregations (SUM, COUNT, AVG)
 - [ ] Temporal variables
-- [ ] Integration with odata-mcp
+- [ ] Integration with sap-odata-mcp-universal
 
 ### Phase 2: Multi-Source (v0.2)
 - [ ] Service registry

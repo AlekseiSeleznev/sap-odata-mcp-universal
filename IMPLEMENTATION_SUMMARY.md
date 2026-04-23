@@ -21,9 +21,9 @@ This Go implementation successfully provides **complete feature parity** with th
 ### ✅ Identical CLI Interface
 ```bash
 # All original CLI flags supported
-./odata-mcp --service https://services.odata.org/V2/OData/OData.svc/
-./odata-mcp --user admin --password secret https://my-service.com/odata/
-./odata-mcp --trace --entities "Products,Orders" --tool-shrink https://service.com/
+./sap-odata-mcp-universal --service https://services.odata.org/V2/OData/OData.svc/
+./sap-odata-mcp-universal --user admin --password secret https://my-service.com/odata/
+./sap-odata-mcp-universal --trace --entities "Products,Orders" --tool-shrink https://service.com/
 ```
 
 ### ✅ Environment Variable Compatibility
@@ -47,7 +47,7 @@ This Go implementation successfully provides **complete feature parity** with th
 
 ### Core Components
 ```
-cmd/odata-mcp/          # CLI entry point
+cmd/sap-odata-mcp-universal/          # CLI entry point
 ├── main.go             # Command-line interface with Cobra
 
 internal/
@@ -152,7 +152,7 @@ The Go implementation is a **drop-in replacement**:
 python odata_mcp.py --service https://my-service.com/odata/
 
 # Go version (identical usage)
-./odata-mcp --service https://my-service.com/odata/
+./sap-odata-mcp-universal --service https://my-service.com/odata/
 ```
 
 ### For Deployment
@@ -162,7 +162,7 @@ pip install -r requirements.txt
 python odata_mcp.py
 
 # Go deployment (much simpler)
-./odata-mcp
+./sap-odata-mcp-universal
 ```
 
 ## 🎯 Next Steps

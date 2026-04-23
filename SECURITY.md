@@ -45,14 +45,14 @@ This repository has multiple layers of protection against accidental credential 
 ### 1. Pre-commit Hooks
 - Automatically scans files before commit for potential secrets
 - Checks for common patterns: passwords, API keys, tokens
-- Prevents commits of dangerous files like `.zmcp.json`, `.env`
+- Prevents commits of dangerous files like `.sap-odata-mcp-universal.json`, `.env`
 - Located in `.githooks/pre-commit`
 
 To enable: `git config core.hooksPath .githooks`
 
 ### 2. .gitignore
 Explicitly ignores:
-- `*.zmcp.json` - MCP configuration files
+- `*.sap-odata-mcp-universal.json` - MCP configuration files
 - `*.key`, `*.pem` - Private keys
 - `.env*` - Environment files
 - `secrets/`, `credentials/` - Secret directories
@@ -88,7 +88,7 @@ Explicitly ignores:
 
 1. **Never commit**:
    - Real passwords, API keys, or tokens
-   - `.zmcp.json` or similar config files
+   - `.sap-odata-mcp-universal.json` or similar config files
    - Private keys or certificates
    - `.env` files with real values
 

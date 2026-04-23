@@ -8,9 +8,9 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/zmcp/odata-mcp/internal/client"
 )
 
 // TestQueryParameterTranslation tests v2 to v4 query parameter translation

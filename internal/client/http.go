@@ -9,15 +9,33 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
-	"github.com/zmcp/odata-mcp/internal/constants"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/constants"
 )
 
 // buildRequest creates an HTTP request with proper headers and authentication
 func (c *ODataClient) buildRequest(ctx context.Context, method, endpoint string, body io.Reader) (*http.Request, error) {
-	fullURL := c.baseURL + strings.TrimPrefix(endpoint, "/")
+	baseURL, err := url.Parse(c.baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse base URL: %w", err)
+	}
+	if endpoint != "" {
+		pathPart, queryPart, _ := strings.Cut(endpoint, "?")
+		if pathPart != "" {
+			baseURL.Path = strings.TrimSuffix(baseURL.Path, "/") + "/" + strings.TrimPrefix(pathPart, "/")
+		}
+		if queryPart != "" {
+			if baseURL.RawQuery != "" {
+				baseURL.RawQuery += "&" + queryPart
+			} else {
+				baseURL.RawQuery = queryPart
+			}
+		}
+	}
+	fullURL := baseURL.String()
 
 	req, err := http.NewRequestWithContext(ctx, method, fullURL, body)
 	if err != nil {

@@ -3,7 +3,7 @@
 # Build release binaries for OData MCP Bridge v1.5.1
 
 VERSION="v1.5.1"
-BINARY_NAME="odata-mcp"
+BINARY_NAME="sap-odata-mcp-universal"
 BUILD_DIR="dist"
 
 echo "Building OData MCP Bridge ${VERSION} binaries..."
@@ -20,7 +20,7 @@ build_platform() {
     local OUTPUT="${BUILD_DIR}/${BINARY_NAME}-${VERSION}-${GOOS}-${GOARCH}${EXT}"
 
     echo "Building for ${GOOS}/${GOARCH}..."
-    GOOS=${GOOS} GOARCH=${GOARCH} go build -ldflags="-s -w" -o ${OUTPUT} cmd/odata-mcp/main.go
+    GOOS=${GOOS} GOARCH=${GOARCH} go build -ldflags="-s -w" -o ${OUTPUT} cmd/sap-odata-mcp-universal/main.go
 
     if [ $? -eq 0 ]; then
         echo "✅ Built ${OUTPUT}"

@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/zmcp/odata-mcp/internal/constants"
-	"github.com/zmcp/odata-mcp/internal/mcp"
-	"github.com/zmcp/odata-mcp/internal/models"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/constants"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/mcp"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
 )
 
 // generateServiceInfoTool creates a tool to get service information

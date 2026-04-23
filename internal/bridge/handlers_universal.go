@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/zmcp/odata-mcp/internal/mcp"
-	"github.com/zmcp/odata-mcp/internal/models"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/mcp"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
 )
 
 // generateUniversalTool creates a single universal OData tool

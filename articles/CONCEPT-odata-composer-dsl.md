@@ -347,7 +347,7 @@ AI only needs to:
 1. [ ] Define formal grammar (EBNF)
 2. [ ] Build parser (Go, using parser combinator or ANTLR)
 3. [ ] Implement single-service aggregations
-4. [ ] Add to odata-mcp as `--composer` mode
+4. [ ] Add to sap-odata-mcp-universal as `--composer` mode
 5. [ ] Test with real enterprise scenarios
 6. [ ] Write "OData Composer: The Missing Link" article
 

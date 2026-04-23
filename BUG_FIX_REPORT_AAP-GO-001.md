@@ -3,7 +3,7 @@
 **Bug ID:** AAP-GO-001  
 **Date:** June 22, 2025  
 **Status:** RESOLVED  
-**Component:** odata-mcp-go OData Client  
+**Component:** sap-odata-mcp-universal OData Client  
 **Fixed By:** Claude Code Assistant  
 
 ## Executive Summary

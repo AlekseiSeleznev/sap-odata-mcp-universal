@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/bridge"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/client"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/config"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/zmcp/odata-mcp/internal/bridge"
-	"github.com/zmcp/odata-mcp/internal/client"
-	"github.com/zmcp/odata-mcp/internal/config"
-	"github.com/zmcp/odata-mcp/internal/models"
 )
 
 // TestNorthwindV4Integration tests against the real Northwind OData v4 service

@@ -20,7 +20,7 @@ test_mcp() {
     
     echo -n "Testing: $test_name... "
     
-    response=$(echo "$request" | ./odata-mcp 2>&1)
+    response=$(echo "$request" | ./sap-odata-mcp-universal 2>&1)
     
     if echo "$response" | grep -q "$expected_pattern"; then
         echo -e "${GREEN}PASS${NC}"

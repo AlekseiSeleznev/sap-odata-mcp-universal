@@ -5,19 +5,19 @@ echo
 
 # Test 1: Basic server response
 echo "1. Testing server initialization..."
-INIT_RESPONSE=$(echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' | ./odata-mcp 2>&1)
+INIT_RESPONSE=$(echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' | ./sap-odata-mcp-universal 2>&1)
 echo "Response: $INIT_RESPONSE"
 echo
 
 # Test 2: Check tools list
 echo "2. Testing tools/list..."
-TOOLS_RESPONSE=$(echo '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' | ./odata-mcp 2>&1)
+TOOLS_RESPONSE=$(echo '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' | ./sap-odata-mcp-universal 2>&1)
 echo "Tools count: $(echo "$TOOLS_RESPONSE" | grep -o '"name"' | wc -l)"
 echo
 
 # Test 3: Test calling service info tool
 echo "3. Testing service info tool..."
-INFO_RESPONSE=$(echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"odata_service_info_for_Z001","arguments":{}}}' | ./odata-mcp 2>&1)
+INFO_RESPONSE=$(echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"odata_service_info_for_Z001","arguments":{}}}' | ./sap-odata-mcp-universal 2>&1)
 echo "Service info call status: $(echo "$INFO_RESPONSE" | grep -q '"error"' && echo "ERROR" || echo "SUCCESS")"
 echo
 

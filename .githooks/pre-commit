@@ -65,7 +65,7 @@ done
 
 # Check for specific filenames that should never be committed
 dangerous_files=(
-    ".zmcp.json"
+    ".sap-odata-mcp-universal.json"
     "zmcp.json"
     ".env"
     ".env.local"

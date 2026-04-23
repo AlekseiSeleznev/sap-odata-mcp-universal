@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/zmcp/odata-mcp/internal/constants"
-	"github.com/zmcp/odata-mcp/internal/metadata"
-	"github.com/zmcp/odata-mcp/internal/models"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/constants"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/metadata"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
 )
 
 // GetMetadata fetches and parses the OData service metadata

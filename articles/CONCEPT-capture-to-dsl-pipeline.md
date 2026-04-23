@@ -55,7 +55,7 @@
               ▼               ▼               ▼
 ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
 │   EXECUTE via   │ │  TRANSPILE to   │ │   EXPOSE as     │
-│   odata-mcp     │ │     ABAP        │ │   OData/MCP     │
+│   sap-odata-mcp-universal     │ │     ABAP        │ │   OData/MCP     │
 │   (Runtime)     │ │   (Native)      │ │   (Service)     │
 └─────────────────┘ └─────────────────┘ └─────────────────┘
 ```
@@ -283,10 +283,10 @@ END WORKFLOW
 
 ## Execution Targets
 
-### 1. odata-mcp Runtime
+### 1. sap-odata-mcp-universal Runtime
 ```bash
 # Execute directly via MCP
-odata-mcp --workflow UpdatePurchaseOrderDeliveryDate \
+sap-odata-mcp-universal --workflow UpdatePurchaseOrderDeliveryDate \
   --param order_id=4500000123 \
   --param new_date=2025-07-15
 ```
@@ -496,7 +496,7 @@ END WORKFLOW
 │         ▼                                    ▼                       │
 │  ┌──────────────┐                    ┌──────────────┐              │
 │  │  Transpiler  │                    │   Runtime    │              │
-│  │  (ABAP, Go)  │                    │  (odata-mcp) │              │
+│  │  (ABAP, Go)  │                    │  (sap-odata-mcp-universal) │              │
 │  └──────────────┘                    └──────────────┘              │
 └─────────────────────────────────────────────────────────────────────┘
            │                                   │
@@ -517,7 +517,7 @@ END WORKFLOW
 
 ### Phase 0: Foundation
 - [x] Fiori Automator (capture)
-- [x] odata-mcp (OData access)
+- [x] sap-odata-mcp-universal (OData access)
 - [ ] Session log format specification
 - [ ] AI analysis prompt templates
 
@@ -533,7 +533,7 @@ END WORKFLOW
 - [ ] Round-trip verification (DSL → execute → compare with original)
 
 ### Phase 3: DSL → Execution
-- [ ] OCL interpreter in odata-mcp
+- [ ] OCL interpreter in sap-odata-mcp-universal
 - [ ] MCP tool generation
 - [ ] State management for workflows
 
@@ -575,7 +575,7 @@ The pipeline:
 1. **Capture** with Fiori Automator (existing)
 2. **Analyze** with AI (identify operations, assertions, fallbacks)
 3. **Compile** to OCL (structured, portable DSL)
-4. **Execute** via odata-mcp OR transpile to ABAP
+4. **Execute** via sap-odata-mcp-universal OR transpile to ABAP
 
 All open source. All AI-friendly. All yours.
 

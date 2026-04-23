@@ -60,8 +60,8 @@ Open in VS Code which will automatically format JSON files.
    ```json
    {
      "mcpServers": {
-       "odata-mcp": {
-         "command": "C:\\path\\to\\odata-mcp.exe --trace-mcp"
+       "sap-odata-mcp-universal": {
+         "command": "C:\\path\\to\\sap-odata-mcp-universal.exe --trace-mcp"
        }
      }
    }
@@ -69,7 +69,7 @@ Open in VS Code which will automatically format JSON files.
 
 #### For Testing
 ```cmd
-odata-mcp.exe --trace-mcp
+sap-odata-mcp-universal.exe --trace-mcp
 ```
 
 ### 5. Quick Test Script for Windows
@@ -81,7 +81,7 @@ echo Testing MCP with trace enabled...
 echo.
 
 REM Start the server with trace
-echo {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}} | odata-mcp.exe --trace-mcp
+echo {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}} | sap-odata-mcp-universal.exe --trace-mcp
 
 echo.
 echo Trace file location:
@@ -117,7 +117,7 @@ If you can't find the trace files:
 4. **Alternative location**: The app might use a different temp directory. Check:
    - `C:\Windows\Temp`
    - `C:\ProgramData\Temp`
-   - The directory where `odata-mcp.exe` is located
+   - The directory where `sap-odata-mcp-universal.exe` is located
 
 ### 8. Example Trace Output
 

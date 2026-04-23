@@ -92,10 +92,10 @@ PASS: TestCountToolTranslation
 ### CLI Usage
 ```bash
 # v2 service
-./odata-mcp https://services.odata.org/V2/Northwind/Northwind.svc/
+./sap-odata-mcp-universal https://services.odata.org/V2/Northwind/Northwind.svc/
 
 # v4 service (automatically detected)
-./odata-mcp https://services.odata.org/V4/Northwind/Northwind.svc/
+./sap-odata-mcp-universal https://services.odata.org/V4/Northwind/Northwind.svc/
 ```
 
 ### Claude Desktop Configuration
@@ -103,7 +103,7 @@ PASS: TestCountToolTranslation
 {
     "mcpServers": {
         "odata-v4-service": {
-            "command": "odata-mcp",
+            "command": "sap-odata-mcp-universal",
             "args": [
                 "--service",
                 "https://services.odata.org/V4/Northwind/Northwind.svc/"

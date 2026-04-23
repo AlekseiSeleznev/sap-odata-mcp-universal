@@ -1,307 +1,155 @@
-# Security Analysis: HTTP Transport Authentication
+# Анализ безопасности HTTP transport в sap-odata-mcp-universal
 
-**Date:** 2026-01-31
-**Document ID:** 004
-**Subject:** Security analysis of multi-user authentication approaches for OData MCP Bridge
-**Related:** PR #24 (Header Forwarding), Issue #12 (SAP OData Integration)
-**Status:** ✅ IMPLEMENTED (Phase 1: Secure-by-Default Hardening)
+**Документ:** 004  
+**Дата:** 2026-04-23  
+**Статус:** актуально
 
 ---
 
-## Executive Summary
+## Краткое резюме
 
-This document analyzes authentication approaches for the OData MCP Bridge HTTP transport. After evaluating multiple solutions, we recommend a **secure-by-default hardening approach** that protects against network-level attacks while acknowledging that host-level compromise is out of scope for application-level fixes.
+`sap-odata-mcp-universal` в HTTP-режиме рассматривается как полноценная точка доступа к SAP OData через MCP. Поэтому security-модель сделана строгой:
 
----
+- `--mcp-token` обязателен всегда
+- для non-localhost bind обязателен TLS
+- для bind на все интерфейсы нужно явное подтверждение через `--allow-all-interfaces`
 
-## Issue Analysis
-
-### PR #24: Header Forwarding
-
-**What it proposes:** Forward HTTP headers (including `Authorization`, `Cookie`) from MCP client requests to the OData service.
-
-**Assessment: Architectural Shortcut**
-
-This approach turns the MCP server into a credential-forwarding proxy rather than an authenticated service boundary.
-
-| Proper Architecture | PR #24 Approach |
-|---------------------|-----------------|
-| MCP server authenticates users | No MCP-level auth |
-| Credential vault/mapping | Blind header passthrough |
-| Audit trail per user | No visibility into who's doing what |
-| Per-user rate limiting | None |
-| Revoke specific user access | Can't without changing OData service |
-
-**Security Concerns:**
-1. MCP server becomes credential aggregation point
-2. No validation of forwarded headers
-3. Over-sharing (browser cookies may exceed intent)
-4. Audit gap
-5. Trust boundary violation
-
-**Recommendation:** Do not merge as-is. If merged, mark as experimental with strong warnings.
+Это сделано для того, чтобы insecure запуск не был "случайным значением по умолчанию".
 
 ---
 
-## Multi-User Authentication Options Evaluated
+## Текущая модель защиты
 
-### Option 1: Per-Instance Model (vsp approach)
+### 1. Loopback (`localhost`, `127.0.0.1`, `::1`)
 
-```
-User A → their own odata-mcp instance (their creds) → OData
-User B → their own odata-mcp instance (their creds) → OData
-```
+Требуется:
 
-| Aspect | Assessment |
-|--------|------------|
-| Code changes | Zero |
-| Security model | Clean - one instance = one identity |
-| Trade-off | Each user needs own server process |
+- `--mcp-token`
 
-**Verdict:** Architecturally proper. No credential translation.
+TLS не обязателен, потому что транспорт остаётся локальным.
 
-### Option 2: API Key → Credential Mapping
+### 2. Non-localhost bind
 
-```yaml
-# credentials.yaml
-users:
-  - api_key: "dev-alice-2024"
-    odata:
-      username: "ALICE"
-      password: "encrypted:xxxxx"
-```
+Требуется:
 
-| Aspect | Assessment |
-|--------|------------|
-| Code changes | ~200-300 LOC |
-| Security model | Pragmatic workaround |
-| Issues | Managing two sets of secrets, manual sync |
+- `--mcp-token`
+- `--tls`
 
-**Verdict:** Not proper. Still credential translation.
+Без TLS сервер не стартует.
 
-### Option 3: JWT/Bearer Token with Claims
+### 3. Bind на все интерфейсы (`0.0.0.0`, `::`)
 
-| Aspect | Assessment |
-|--------|------------|
-| Code changes | ~400-500 LOC |
-| Security model | Better - cryptographic identity |
-| Issues | Still need credential mapping on server side |
+Требуется:
 
-**Verdict:** Better but still not true federation.
+- `--allow-all-interfaces`
+- `--mcp-token`
+- `--tls`
 
-### Option 4: OAuth Token Exchange / Identity Federation
-
-```
-User → IdP (Azure AD, Okta, SAP IAS) → Token
-MCP Server → Passes Token → OData validates with same IdP
-```
-
-| Aspect | Assessment |
-|--------|------------|
-| Code changes | ~800+ LOC + infrastructure |
-| Security model | Proper - true identity federation |
-| Issues | Requires SAP Basis config, corporate IdP |
-
-**Verdict:** The only truly proper solution. Requires infrastructure investment.
+Это дополнительный guardrail против случайной публикации сервиса наружу.
 
 ---
 
-## Recommended Solution: Secure-by-Default Hardening
+## Почему токен обязателен даже на localhost
 
-### Rationale
+Даже локальный MCP endpoint даёт доступ к:
 
-Rather than implementing complex multi-user auth, we recommend:
+- SAP-учётным данным через исполняемый процесс
+- данным SAP-системы
+- потенциально write-capable инструментам
 
-1. **Per-instance model** (one instance = one identity)
-2. **Secure-by-default** guards to prevent accidental exposure
-3. **Documentation** for enterprise deployment patterns
+Поэтому локальный HTTP endpoint не рассматривается как "безопасный сам по себе".
 
-### Current Vulnerabilities
+---
+
+## Dashboard и хранение учётных данных
+
+Dashboard хранит в state file:
+
+- активное подключение
+- список SAP OData профилей
+- логины
+- пароли
+- режим доступа профиля
+
+Важно:
+
+- пароль скрыт в UI
+- пароль **не шифруется** в state file
+- защита файла зависит от прав на хостовой файловой системе
+
+Следствие:
+
+- нужно ограничивать filesystem permissions
+- нельзя считать state file безопасным секрет-хранилищем
+
+---
+
+## Header forwarding
+
+Флаг:
 
 ```bash
-# Currently possible - zero warnings
-odata-mcp --transport streamable-http --http-addr 0.0.0.0:3000 \
-          --user SAP_ADMIN --password secret
-# Result: Credentials exposed to entire network
+--forward-mcp-headers
 ```
 
-### Proposed Hardening (~100-150 LOC)
+Он позволяет прокидывать HTTP headers от MCP-клиента к OData service.
 
-```go
-func validateHTTPSecurity(cfg *HTTPConfig) error {
-    host, _, err := net.SplitHostPort(cfg.Addr)
-    if err != nil {
-        return err
-    }
+Это полезно для:
 
-    ip := net.ParseIP(host)
-    isLoopback := ip != nil && ip.IsLoopback()
+- per-request аутентификации
+- multi-tenant сценариев
+- прокидывания кастомных `X-*` заголовков
 
-    // Reject 0.0.0.0/:: without explicit flag
-    if ip != nil && ip.IsUnspecified() {
-        if !cfg.ExplicitAllowAllInterfaces {
-            return fmt.Errorf(
-                "binding to all interfaces (0.0.0.0/::) is dangerous\n"+
-                "Use specific interface IP or --allow-all-interfaces")
-        }
-    }
+Но это также повышает риск:
 
-    // Require TLS + token for non-localhost
-    if !isLoopback {
-        if cfg.Token == "" {
-            return fmt.Errorf("--mcp-token required for non-localhost")
-        }
-        if !cfg.TLS.Enabled {
-            return fmt.Errorf("--tls required for non-localhost")
-        }
-    }
+- сервер становится доверенным прокси для credential-bearing headers
+- ошибка конфигурации клиента может отправлять лишние заголовки в OData
 
-    return nil
-}
+Практический вывод:
 
-// Constant-time token comparison (prevent timing attacks)
-func validateToken(provided, expected string) bool {
-    return subtle.ConstantTimeCompare(
-        []byte(provided),
-        []byte(expected),
-    ) == 1
-}
-```
-
-### Security Matrix After Hardening
-
-| Binding | Token | TLS | Allowed? |
-|---------|-------|-----|----------|
-| 127.0.0.1:3000 | - | - | Yes |
-| 192.168.1.x:3000 | Yes | Yes | Yes |
-| 192.168.1.x:3000 | Yes | No | No - TLS required |
-| 192.168.1.x:3000 | No | - | No - token required |
-| 0.0.0.0:3000 | - | - | No - explicit flag required |
-
-### Additional Hardening Measures
-
-1. **Token from file, not CLI** (avoid `ps` exposure)
-   ```bash
-   --mcp-token-file /run/secrets/mcp-token
-   ```
-
-2. **Proper address parsing** (handle IPv6, shorthand)
-   ```go
-   // Handle: 127.0.0.2, 127.1, [::1], ::, etc.
-   ```
-
-3. **Rate limiting on token attempts** (prevent brute force)
+- используйте этот режим только в доверенном контуре
+- не комбинируйте его с публичным небезопасным HTTP доступом
 
 ---
 
-## Threat Model Analysis
+## Рекомендованный production-профиль
 
-### What Hardening Protects Against
+Минимальный baseline:
 
-| Threat | Current | With Hardening |
-|--------|---------|----------------|
-| Accidental network exposure | Vulnerable | **Protected** |
-| Network attacker (no host access) | Vulnerable | **Protected** |
-| SSRF from same host | Vulnerable | Vulnerable |
-| Host compromise | Vulnerable | Vulnerable |
-| Container sidecar attack | Vulnerable | Vulnerable |
+- bind только на нужный интерфейс
+- `--mcp-token-file` вместо `--mcp-token`
+- TLS для любого удалённого доступа
+- dashboard state file с ограниченными правами
+- `restricted` по умолчанию для production SAP systems
 
-### Why Host Compromise is Out of Scope
+Пример:
 
-**Security Boundary Principle:** You cannot defend against threats operating at a higher privilege level than your code.
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ PHYSICAL ACCESS                                              │
-│  └─► App-level fix? Impossible.                             │
-├─────────────────────────────────────────────────────────────┤
-│ HYPERVISOR / CLOUD PROVIDER                                  │
-│  └─► App-level fix? Impossible.                             │
-├─────────────────────────────────────────────────────────────┤
-│ HOST OS (root/admin)                                         │
-│  └─► App-level fix? Impossible.                             │
-├─────────────────────────────────────────────────────────────┤
-│ HOST OS (same user)                                          │
-│  └─► App-level fix? Impossible.                             │
-├─────────────────────────────────────────────────────────────┤
-│ NETWORK ACCESS            ◄── Hardening protects HERE       │
-│  └─► App-level fix? YES                                     │
-└─────────────────────────────────────────────────────────────┘
-```
-
-If an attacker has host access, they can:
 ```bash
-# Read credentials directly
-cat /proc/$(pgrep odata-mcp)/environ | tr '\0' '\n' | grep PASSWORD
-cat /proc/$(pgrep odata-mcp)/cmdline
-
-# Attach debugger
-gdb -p $(pgrep odata-mcp)
-
-# Replace binary
-cp malicious /usr/bin/odata-mcp
+./sap-odata-mcp-universal \
+  --transport streamable-http \
+  --http-addr 10.0.0.5:8443 \
+  --mcp-token-file /etc/sap-odata-mcp/token \
+  --tls \
+  --tls-cert /etc/sap-odata-mcp/tls.crt \
+  --tls-key /etc/sap-odata-mcp/tls.key
 ```
 
-**No application code can prevent this.** Host security is the responsibility of:
-- OS hardening
-- Access controls
-- Container isolation
-- Infrastructure security
+---
+
+## Что не закрывает приложение
+
+Приложение не решает:
+
+- компрометацию хоста
+- неправильные права на state file
+- утечки токена через shell history, если используется `--mcp-token`
+- небезопасную эксплуатацию reverse proxy
+
+То есть secure-by-default есть, но безопасность развёртывания всё равно остаётся обязанностью оператора.
 
 ---
 
-## Implementation Recommendation
+## Связанные документы
 
-### Phase 1: Secure by Default (~100-150 LOC)
-
-1. Localhost-only binding by default
-2. Require `--mcp-token` + `--tls` for non-localhost
-3. Block `0.0.0.0`/`::` without explicit flag
-4. Token from file option (avoid CLI exposure)
-5. Constant-time token comparison
-
-### Phase 2: Documentation
-
-1. Secure deployment guide
-2. Enterprise patterns (API gateway, OAuth proxy)
-3. Container/Kubernetes deployment examples
-4. Threat model documentation
-
-### What NOT to Implement
-
-1. Complex multi-user auth system
-2. Credential vault integration
-3. OAuth/SAML at application level
-4. Any "fix" for host-level compromise
-
----
-
-## Comparison: vsp vs odata_mcp_go
-
-| Aspect | vsp (vibing-steampunk) | odata_mcp_go |
-|--------|------------------------|--------------|
-| MCP Transport | stdio only | stdio, SSE, HTTP |
-| Security risk | None (process-local) | HTTP endpoints exposed |
-| Needs hardening? | No | Yes |
-| Multi-user model | Per-instance | Per-instance (recommended) |
-
-vsp's stdio-only approach is inherently secure. odata_mcp_go's HTTP transports require the hardening described in this document.
-
----
-
-## Conclusion
-
-1. **PR #24 (header forwarding)** is a security shortcut - not recommended
-2. **True proper auth** (identity federation) requires infrastructure, not code
-3. **Pragmatic proper solution** is per-instance + secure-by-default hardening
-4. **~100-150 LOC** closes network attack surface
-5. **Host compromise** is out of scope - different security boundary
-
-The recommended approach protects against the most common and likely threats (accidental exposure, network attackers) while being honest about what application-level code cannot fix (host compromise).
-
----
-
-## Related Documents
-
-- **Document 005:** Issue #12 - SAP OData Multi-Schema Parser Bug (separate document)
-- **PR #24:** Header forwarding (security concerns documented above)
+- [README.md](../README.md)
+- [003-odata-mcp-e2e-documentation.md](003-odata-mcp-e2e-documentation.md)

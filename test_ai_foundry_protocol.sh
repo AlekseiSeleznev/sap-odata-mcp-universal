@@ -7,7 +7,7 @@ echo ""
 # Test 1: Default protocol version (2024-11-05)
 echo "Test 1: Default protocol version"
 echo "---------------------------------"
-./build/odata-mcp --service "https://services.odata.org/V2/Northwind/Northwind.svc/" <<EOF | grep -A 10 '"protocolVersion"'
+./build/sap-odata-mcp-universal --service "https://services.odata.org/V2/Northwind/Northwind.svc/" <<EOF | grep -A 10 '"protocolVersion"'
 {
   "jsonrpc": "2.0",
   "method": "initialize",
@@ -26,7 +26,7 @@ EOF
 echo ""
 echo "Test 2: AI Foundry protocol version (2025-06-18)"
 echo "-------------------------------------------------"
-./build/odata-mcp --service "https://services.odata.org/V2/Northwind/Northwind.svc/" --protocol-version "2025-06-18" <<EOF | grep -A 10 '"protocolVersion"'
+./build/sap-odata-mcp-universal --service "https://services.odata.org/V2/Northwind/Northwind.svc/" --protocol-version "2025-06-18" <<EOF | grep -A 10 '"protocolVersion"'
 {
   "jsonrpc": "2.0",
   "method": "initialize",
@@ -47,7 +47,7 @@ echo "Test 3: Verify field ordering matches AI Foundry expectations"
 echo "-------------------------------------------------------------"
 echo "Expected order: capabilities, protocolVersion, serverInfo"
 echo ""
-./build/odata-mcp --service "https://services.odata.org/V2/Northwind/Northwind.svc/" --protocol-version "2025-06-18" <<EOF | python3 -c "
+./build/sap-odata-mcp-universal --service "https://services.odata.org/V2/Northwind/Northwind.svc/" --protocol-version "2025-06-18" <<EOF | python3 -c "
 import sys
 import json
 

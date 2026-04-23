@@ -20,7 +20,7 @@ Hints are displayed in the `odata_service_info` tool response, making them easil
 By default, the bridge looks for a `hints.json` file in the same directory as the binary:
 
 ```bash
-./odata-mcp https://my-service.com/odata/
+./sap-odata-mcp-universal https://my-service.com/odata/
 ```
 
 ### Custom Hints File
@@ -28,7 +28,7 @@ By default, the bridge looks for a `hints.json` file in the same directory as th
 Use a custom hints file with the `--hints-file` flag:
 
 ```bash
-./odata-mcp --hints-file /path/to/my-hints.json https://my-service.com/odata/
+./sap-odata-mcp-universal --hints-file /path/to/my-hints.json https://my-service.com/odata/
 ```
 
 ### Command Line Hints
@@ -37,10 +37,10 @@ Inject hints directly from the command line:
 
 ```bash
 # Simple text hint
-./odata-mcp --hint "Remember to use \$expand for navigation properties" https://my-service.com/odata/
+./sap-odata-mcp-universal --hint "Remember to use \$expand for navigation properties" https://my-service.com/odata/
 
 # JSON hint
-./odata-mcp --hint '{"notes":["Custom note"], "workarounds":["Custom workaround"]}' https://my-service.com/odata/
+./sap-odata-mcp-universal --hint '{"notes":["Custom note"], "workarounds":["Custom workaround"]}' https://my-service.com/odata/
 ```
 
 ### Viewing Hints
@@ -237,7 +237,7 @@ Create a `hints.json` file with your findings:
 
 ```bash
 # Test with your custom hints
-./odata-mcp --hints-file my-hints.json https://my-service.com/odata/
+./sap-odata-mcp-universal --hints-file my-hints.json https://my-service.com/odata/
 
 # Verify hints appear in service info
 # Call odata_service_info tool in your MCP client
@@ -258,7 +258,7 @@ Create a `hints.json` file with your findings:
 
 1. Check file path:
    ```bash
-   ./odata-mcp --verbose --hints-file my-hints.json https://service.com/odata/
+   ./sap-odata-mcp-universal --verbose --hints-file my-hints.json https://service.com/odata/
    ```
 
 2. Verify JSON syntax:

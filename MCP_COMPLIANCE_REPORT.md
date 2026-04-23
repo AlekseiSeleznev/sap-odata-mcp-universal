@@ -2,7 +2,7 @@
 
 ## Summary
 
-The odata-mcp server has been thoroughly tested and is **fully compliant** with the MCP (Model Context Protocol) specification v2024-11-05.
+The sap-odata-mcp-universal server has been thoroughly tested and is **fully compliant** with the MCP (Model Context Protocol) specification v2024-11-05.
 
 ## Test Results
 
@@ -72,7 +72,7 @@ To debug Claude Desktop issues:
 
 1. **Enable trace logging**:
    ```bash
-   ./odata-mcp --trace-mcp
+   ./sap-odata-mcp-universal --trace-mcp
    ```
 
 2. **Check trace file**:
@@ -82,9 +82,9 @@ To debug Claude Desktop issues:
 
 3. **Use MCP Inspector**:
    ```bash
-   npx @modelcontextprotocol/inspector ./odata-mcp
+   npx @modelcontextprotocol/inspector ./sap-odata-mcp-universal
    ```
 
 ## Conclusion
 
-The odata-mcp server is fully MCP compliant. Any validation errors seen in Claude Desktop appear to be client-specific and not due to protocol violations.
+The sap-odata-mcp-universal server is fully MCP compliant. Any validation errors seen in Claude Desktop appear to be client-specific and not due to protocol violations.

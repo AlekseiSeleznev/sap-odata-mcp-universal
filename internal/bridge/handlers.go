@@ -10,9 +10,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/zmcp/odata-mcp/internal/constants"
-	"github.com/zmcp/odata-mcp/internal/models"
-	"github.com/zmcp/odata-mcp/internal/utils"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/constants"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/utils"
 )
 
 // wrapKeyValueForType wraps a key value with the appropriate type for OData formatting

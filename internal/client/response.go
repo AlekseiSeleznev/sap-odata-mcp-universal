@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/zmcp/odata-mcp/internal/models"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
 )
 
 // parseODataResponse parses an OData response

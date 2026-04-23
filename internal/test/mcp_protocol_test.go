@@ -54,13 +54,13 @@ type MCPClient struct {
 
 func NewMCPClient(t *testing.T, serviceURL string) (*MCPClient, error) {
 	// Build the server if needed
-	buildCmd := exec.Command("go", "build", "-buildvcs=false", "-o", "../../odata-mcp", "../../cmd/odata-mcp")
+	buildCmd := exec.Command("go", "build", "-buildvcs=false", "-o", "../../sap-odata-mcp-universal", "../../cmd/sap-odata-mcp-universal")
 	buildCmd.Dir = "."
 	if output, err := buildCmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("failed to build server: %w\nOutput: %s", err, output)
 	}
 
-	cmd := exec.Command("../../odata-mcp", serviceURL)
+	cmd := exec.Command("../../sap-odata-mcp-universal", serviceURL)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -367,7 +367,7 @@ func (suite *MCPProtocolTestSuite) TestInitializeProtocol() {
 	// Verify server info
 	serverInfo, ok := result["serverInfo"].(map[string]any)
 	assert.True(suite.T(), ok)
-	assert.Equal(suite.T(), "odata-mcp-bridge", serverInfo["name"])
+	assert.Equal(suite.T(), "sap-odata-mcp-universal", serverInfo["name"])
 
 	// Verify capabilities
 	capabilities, ok := result["capabilities"].(map[string]any)

@@ -66,7 +66,7 @@ async def delete_entity(...):
     )
 ```
 
-## Go Implementation (odata_mcp_go)
+## Go Implementation (sap-odata-mcp-universal)
 
 ### Token Fetching Strategy: **Proactive with Fallback**
 

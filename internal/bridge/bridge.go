@@ -12,13 +12,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zmcp/odata-mcp/internal/client"
-	"github.com/zmcp/odata-mcp/internal/config"
-	"github.com/zmcp/odata-mcp/internal/constants"
-	"github.com/zmcp/odata-mcp/internal/hint"
-	"github.com/zmcp/odata-mcp/internal/mcp"
-	"github.com/zmcp/odata-mcp/internal/models"
-	"github.com/zmcp/odata-mcp/internal/transport"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/client"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/config"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/constants"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/hint"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/mcp"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/transport"
 )
 
 // ODataMCPBridge connects OData services to MCP

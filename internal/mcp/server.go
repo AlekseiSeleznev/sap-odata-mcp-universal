@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/zmcp/odata-mcp/internal/constants"
-	"github.com/zmcp/odata-mcp/internal/transport"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/constants"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/transport"
 )
 
 // Tool represents an MCP tool

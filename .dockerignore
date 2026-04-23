@@ -1,7 +1,7 @@
 # Build artifacts
 build/
 dist/
-odata-mcp
+sap-odata-mcp-universal
 *.exe
 
 # Development files

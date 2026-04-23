@@ -11,4 +11,4 @@
     echo '{"jsonrpc":"2.0","id":"3","method":"prompts/list","params":{}}'
     sleep 0.1
     echo '{"jsonrpc":"2.0","id":"4","method":"tools/list","params":{}}'
-) | ./odata-mcp --trace-mcp 2>&1
+) | ./sap-odata-mcp-universal --trace-mcp 2>&1

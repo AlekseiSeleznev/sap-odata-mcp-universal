@@ -17,7 +17,7 @@ def check_server():
     # Test 1: Check tool inputSchema format
     print("1. Checking tool schemas...")
     tools_req = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
-    proc = subprocess.Popen(['./odata-mcp'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    proc = subprocess.Popen(['./sap-odata-mcp-universal'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     stdout, _ = proc.communicate(json.dumps(tools_req))
     
     try:
@@ -71,7 +71,7 @@ def check_server():
             "params": {"name": first_tool, "arguments": {}}
         }
         
-        proc = subprocess.Popen(['./odata-mcp'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        proc = subprocess.Popen(['./sap-odata-mcp-universal'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         stdout, _ = proc.communicate(json.dumps(call_req))
         
         try:
@@ -101,7 +101,7 @@ def check_server():
     # Test 3: Check capability format
     print("\n3. Checking capability declarations...")
     init_req = {"jsonrpc": "2.0", "id": 3, "method": "initialize", "params": {}}
-    proc = subprocess.Popen(['./odata-mcp'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    proc = subprocess.Popen(['./sap-odata-mcp-universal'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     stdout, _ = proc.communicate(json.dumps(init_req))
     
     try:

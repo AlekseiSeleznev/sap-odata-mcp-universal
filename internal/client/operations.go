@@ -13,8 +13,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/zmcp/odata-mcp/internal/constants"
-	"github.com/zmcp/odata-mcp/internal/models"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/constants"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
 )
 
 // GetEntitySet retrieves entities from an entity set

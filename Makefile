@@ -2,8 +2,8 @@
 # Makefile for building, testing, and distributing
 
 # Variables
-BINARY_NAME=odata-mcp
-MAIN_PATH=cmd/odata-mcp/main.go
+BINARY_NAME=sap-odata-mcp-universal
+MAIN_PATH=cmd/sap-odata-mcp-universal/main.go
 BUILD_DIR=build
 DIST_DIR=dist
 

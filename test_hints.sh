@@ -23,12 +23,12 @@ export ODATA_SERVICE_URL="https://example.com/sap/opu/odata/sap/SRA020_PO_TRACKI
 export ODATA_USERNAME="test"
 export ODATA_PASSWORD="test"
 
-echo "Running odata-mcp with SAP PO Tracking service URL..."
+echo "Running sap-odata-mcp-universal with SAP PO Tracking service URL..."
 echo "$ODATA_SERVICE_URL"
 echo
 
 # Note: This would need a real service to work, but shows the concept
 echo "Would inject hints into service info response:"
-./odata-mcp --verbose 2>&1 | grep -A20 "implementation_hints" || echo "Hints would appear here with real service"
+./sap-odata-mcp-universal --verbose 2>&1 | grep -A20 "implementation_hints" || echo "Hints would appear here with real service"
 
 rm -f test_request.json

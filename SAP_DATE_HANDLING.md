@@ -26,13 +26,13 @@ The implementation intelligently detects date fields by:
 
 ```bash
 # Legacy dates are enabled by default for SAP
-./odata-mcp https://your-sap-service.com/odata/
+./sap-odata-mcp-universal https://your-sap-service.com/odata/
 
 # Explicitly enable legacy dates
-./odata-mcp --legacy-dates https://your-sap-service.com/odata/
+./sap-odata-mcp-universal --legacy-dates https://your-sap-service.com/odata/
 
 # Disable legacy dates for non-SAP services
-./odata-mcp --no-legacy-dates https://other-service.com/odata/
+./sap-odata-mcp-universal --no-legacy-dates https://other-service.com/odata/
 ```
 
 ## Implementation Details

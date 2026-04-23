@@ -47,16 +47,16 @@ jobs:
         cd build
         
         # Linux
-        tar -czf odata-mcp-${{ inputs.version }}-linux-amd64.tar.gz odata-mcp-linux-amd64
+        tar -czf sap-odata-mcp-universal-${{ inputs.version }}-linux-amd64.tar.gz sap-odata-mcp-universal-linux-amd64
         
         # Windows
-        zip odata-mcp-${{ inputs.version }}-windows-amd64.zip odata-mcp-windows-amd64.exe
+        zip sap-odata-mcp-universal-${{ inputs.version }}-windows-amd64.zip sap-odata-mcp-universal-windows-amd64.exe
         
         # macOS Intel
-        tar -czf odata-mcp-${{ inputs.version }}-darwin-amd64.tar.gz odata-mcp-darwin-amd64
+        tar -czf sap-odata-mcp-universal-${{ inputs.version }}-darwin-amd64.tar.gz sap-odata-mcp-universal-darwin-amd64
         
         # macOS ARM
-        tar -czf odata-mcp-${{ inputs.version }}-darwin-arm64.tar.gz odata-mcp-darwin-arm64
+        tar -czf sap-odata-mcp-universal-${{ inputs.version }}-darwin-arm64.tar.gz sap-odata-mcp-universal-darwin-arm64
         
         # Create checksums
         sha256sum *.tar.gz *.zip > checksums.txt
@@ -75,27 +75,27 @@ jobs:
           ### Installation
           
           1. Download the appropriate archive for your platform
-          2. Extract: `tar -xzf odata-mcp-*.tar.gz` or `unzip odata-mcp-*.zip`
-          3. Make executable (Linux/macOS): `chmod +x odata-mcp-*`
+          2. Extract: `tar -xzf sap-odata-mcp-universal-*.tar.gz` or `unzip sap-odata-mcp-universal-*.zip`
+          3. Make executable (Linux/macOS): `chmod +x sap-odata-mcp-universal-*`
           4. Move to PATH or use full path in Claude Desktop config
           
           ### Quick Install (Linux/macOS)
           
           ```bash
           # Linux
-          curl -L https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/odata-mcp-${{ inputs.version }}-linux-amd64.tar.gz | tar -xz
-          chmod +x odata-mcp-linux-amd64
-          sudo mv odata-mcp-linux-amd64 /usr/local/bin/odata-mcp
+          curl -L https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/sap-odata-mcp-universal-${{ inputs.version }}-linux-amd64.tar.gz | tar -xz
+          chmod +x sap-odata-mcp-universal-linux-amd64
+          sudo mv sap-odata-mcp-universal-linux-amd64 /usr/local/bin/sap-odata-mcp-universal
           
           # macOS Intel
-          curl -L https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/odata-mcp-${{ inputs.version }}-darwin-amd64.tar.gz | tar -xz
-          chmod +x odata-mcp-darwin-amd64
-          sudo mv odata-mcp-darwin-amd64 /usr/local/bin/odata-mcp
+          curl -L https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/sap-odata-mcp-universal-${{ inputs.version }}-darwin-amd64.tar.gz | tar -xz
+          chmod +x sap-odata-mcp-universal-darwin-amd64
+          sudo mv sap-odata-mcp-universal-darwin-amd64 /usr/local/bin/sap-odata-mcp-universal
           
           # macOS Apple Silicon
-          curl -L https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/odata-mcp-${{ inputs.version }}-darwin-arm64.tar.gz | tar -xz
-          chmod +x odata-mcp-darwin-arm64
-          sudo mv odata-mcp-darwin-arm64 /usr/local/bin/odata-mcp
+          curl -L https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/sap-odata-mcp-universal-${{ inputs.version }}-darwin-arm64.tar.gz | tar -xz
+          chmod +x sap-odata-mcp-universal-darwin-arm64
+          sudo mv sap-odata-mcp-universal-darwin-arm64 /usr/local/bin/sap-odata-mcp-universal
           ```
           
           ### Checksums

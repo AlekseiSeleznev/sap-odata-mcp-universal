@@ -1,7 +1,7 @@
 const { spawn } = require('child_process');
 
-// Get the odata-mcp path
-const odataMcpPath = './odata-mcp';
+// Get the sap-odata-mcp-universal path
+const odataMcpPath = './sap-odata-mcp-universal';
 
 // Spawn the process
 const child = spawn(odataMcpPath, process.argv.slice(2), {

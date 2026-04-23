@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zmcp/odata-mcp/internal/transport"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/transport"
 )
 
 // SSETransport implements the Transport interface for Server-Sent Events

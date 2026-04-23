@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zmcp/odata-mcp/internal/client"
-	"github.com/zmcp/odata-mcp/internal/transport"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/client"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/transport"
 )
 
 // StreamableHTTPTransport implements the Transport interface for Streamable HTTP

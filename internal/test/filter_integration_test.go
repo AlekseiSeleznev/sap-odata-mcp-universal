@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/client"
 	"github.com/stretchr/testify/assert"
-	"github.com/zmcp/odata-mcp/internal/client"
 )
 
 // TestFilterIntegration tests filter operations against real SAP service

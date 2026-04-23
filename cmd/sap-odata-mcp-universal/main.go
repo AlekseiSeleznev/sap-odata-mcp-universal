@@ -17,35 +17,35 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/zmcp/odata-mcp/internal/bridge"
-	"github.com/zmcp/odata-mcp/internal/config"
-	"github.com/zmcp/odata-mcp/internal/dashboard"
-	"github.com/zmcp/odata-mcp/internal/debug"
-	"github.com/zmcp/odata-mcp/internal/transport"
-	"github.com/zmcp/odata-mcp/internal/transport/http"
-	"github.com/zmcp/odata-mcp/internal/transport/stdio"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/bridge"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/config"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/dashboard"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/debug"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/transport"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/transport/http"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/transport/stdio"
 )
 
 var cfg *config.Config
 
 var rootCmd = &cobra.Command{
-	Use:   "odata-mcp [service-url]",
-	Short: "OData to MCP Bridge - Universal OData v2 to Model Context Protocol bridge",
-	Long: `OData to MCP Bridge - Universal OData v2 to Model Context Protocol bridge.
+	Use:   "sap-odata-mcp-universal [service-url]",
+	Short: "sap-odata-mcp-universal - SAP OData to MCP bridge",
+	Long: `sap-odata-mcp-universal - SAP OData to MCP bridge.
 
-This tool creates a bridge between OData v2 services and the Model Context Protocol
+This tool creates a bridge between SAP OData v2 services and the Model Context Protocol
 (MCP), dynamically generating MCP tools based on OData metadata.
 
 Examples:
-  odata-mcp https://services.odata.org/V2/Northwind/Northwind.svc/
-  odata-mcp --service https://my-sap-service.com/sap/opu/odata/sap/SERVICE_NAME/
-  odata-mcp --user admin --password secret https://my-service.com/odata/
-  odata-mcp --cookie-file cookies.txt https://my-service.com/odata/
+  sap-odata-mcp-universal https://services.odata.org/V2/Northwind/Northwind.svc/
+  sap-odata-mcp-universal --service https://my-sap-service.com/sap/opu/odata/sap/SERVICE_NAME/
+  sap-odata-mcp-universal --user admin --password secret https://my-service.com/odata/
+  sap-odata-mcp-universal --cookie-file cookies.txt https://my-service.com/odata/
   
 Operation Filtering Examples:
-  odata-mcp --disable "cud" https://example.com/odata/  # Disable create, update, delete
-  odata-mcp --enable "r" https://example.com/odata/     # Enable only read operations (search, filter, get)
-  odata-mcp --disable "a" https://example.com/odata/    # Disable actions/function imports`,
+  sap-odata-mcp-universal --disable "cud" https://example.com/odata/  # Disable create, update, delete
+  sap-odata-mcp-universal --enable "r" https://example.com/odata/     # Enable only read operations (search, filter, get)
+  sap-odata-mcp-universal --disable "a" https://example.com/odata/    # Disable actions/function imports`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runBridge,
 }

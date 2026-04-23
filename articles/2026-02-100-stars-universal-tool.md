@@ -51,14 +51,14 @@ Ironic, isn't it?
 
 Enter **Filipp Gnilyak** ([@vitalratel](https://github.com/vitalratel)).
 
-While I was still scratching my head about the context rot problem, Filipp opened [PR #26](https://github.com/oisee/odata_mcp_go/pull/26) with a solution so elegant I wondered why I hadn't thought of it myself:
+While I was still scratching my head about the context rot problem, Filipp opened [PR #26](https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/pull/26) with a solution so elegant I wondered why I hadn't thought of it myself:
 
 ```bash
 # Before: 485 tools, 37,000 tokens, Claude says "no"
-./odata-mcp https://large-sap-service.com/odata/
+./sap-odata-mcp-universal https://large-sap-service.com/odata/
 
 # After: 1 tool, 900 tokens, Claude says "how can I help?"
-./odata-mcp --universal https://large-sap-service.com/odata/
+./sap-odata-mcp-universal --universal https://large-sap-service.com/odata/
 ```
 
 One flag. That's it.
@@ -143,13 +143,13 @@ February     v1.6.0    "One Tool to Rule Them All"
 
 ### MCP Header Forwarding
 ```bash
-./odata-mcp --transport streamable-http --forward-mcp-headers https://api.com/odata/
+./sap-odata-mcp-universal --transport streamable-http --forward-mcp-headers https://api.com/odata/
 ```
 Pass authentication headers dynamically per-request. Perfect for multi-tenant scenarios.
 
 ### AI Foundry Compatibility
 ```bash
-./odata-mcp --protocol-version 2025-06-18 https://service.com/odata/
+./sap-odata-mcp-universal --protocol-version 2025-06-18 https://service.com/odata/
 ```
 Works with Microsoft's AI Foundry out of the box.
 
@@ -213,7 +213,7 @@ And everyone who:
 ## Try It Right Now
 
 ### Installation (2 minutes)
-1. Download from [releases](https://github.com/oisee/odata_mcp_go/releases/tag/v1.6.0)
+1. Download from [releases](https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/releases/tag/v1.6.0)
 2. Add to your PATH
 3. Update `claude_desktop_config.json`:
 
@@ -221,7 +221,7 @@ And everyone who:
 {
     "mcpServers": {
         "my-service": {
-            "command": "odata-mcp",
+            "command": "sap-odata-mcp-universal",
             "args": [
                 "--service", "https://your-odata-service.com/",
                 "--universal",
@@ -237,10 +237,10 @@ Try this with your largest OData service:
 
 ```bash
 # Check tool count in standard mode
-./odata-mcp --trace https://your-service.com/odata/ | grep total_tools
+./sap-odata-mcp-universal --trace https://your-service.com/odata/ | grep total_tools
 
 # Check tool count in universal mode
-./odata-mcp --trace --universal https://your-service.com/odata/ | grep total_tools
+./sap-odata-mcp-universal --trace --universal https://your-service.com/odata/ | grep total_tools
 ```
 
 Share your before/after numbers in the comments!
@@ -272,8 +272,8 @@ Here's to the next 100 stars.
 ---
 
 **Links:**
-- GitHub: [oisee/odata_mcp_go](https://github.com/oisee/odata_mcp_go)
-- Release v1.6.0: [Download](https://github.com/oisee/odata_mcp_go/releases/tag/v1.6.0)
+- GitHub: [AlekseiSeleznev/sap-odata-mcp-universal](https://github.com/AlekseiSeleznev/sap-odata-mcp-universal)
+- Release v1.6.0: [Download](https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/releases/tag/v1.6.0)
 - Previous article: [I Built the Universal OData-MCP Bridge](https://linkedin.com/in/alice-vinogradova)
 
 ---

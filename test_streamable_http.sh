@@ -8,7 +8,7 @@ echo
 
 # Start the server with streamable-http transport
 echo "Starting OData MCP with Streamable HTTP transport..."
-./odata-mcp --transport streamable-http --verbose --service https://services.odata.org/V2/Northwind/Northwind.svc/ &
+./sap-odata-mcp-universal --transport streamable-http --verbose --service https://services.odata.org/V2/Northwind/Northwind.svc/ &
 SERVER_PID=$!
 
 # Give the server time to start

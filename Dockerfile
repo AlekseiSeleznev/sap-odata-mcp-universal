@@ -19,8 +19,8 @@ COPY . .
 # Build the binary
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-w -s -X main.Version=docker -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    -o odata-mcp \
-    cmd/odata-mcp/main.go
+    -o sap-odata-mcp-universal \
+    cmd/sap-odata-mcp-universal/main.go
 
 # Final stage - minimal runtime image
 FROM alpine:latest
@@ -36,7 +36,7 @@ RUN addgroup -g 1001 -S appgroup && \
 WORKDIR /app
 
 # Copy binary from builder stage
-COPY --from=builder /build/odata-mcp .
+COPY --from=builder /build/sap-odata-mcp-universal .
 
 # Copy documentation
 COPY README.md .
@@ -52,10 +52,10 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD ./odata-mcp --help > /dev/null || exit 1
+    CMD ./sap-odata-mcp-universal --help > /dev/null || exit 1
 
 # Default command
-ENTRYPOINT ["./odata-mcp"]
+ENTRYPOINT ["./sap-odata-mcp-universal"]
 
 # Default arguments (can be overridden)
 CMD ["--help"]

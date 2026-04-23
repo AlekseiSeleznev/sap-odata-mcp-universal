@@ -444,7 +444,7 @@ ENDCLASS.
          ▼                 ▼               ▼
 ┌─────────────────┐ ┌─────────────┐ ┌─────────────┐
 │  Execute via    │ │  Generate   │ │  Native     │
-│  odata-mcp      │ │  ABAP/Go/TS │ │  WASM       │
+│  sap-odata-mcp-universal      │ │  ABAP/Go/TS │ │  WASM       │
 │  (MCP/JSON-RPC) │ │  code       │ │  module     │
 └─────────────────┘ └─────────────┘ └─────────────┘
 ```
@@ -577,7 +577,7 @@ END TOOL
 
 ### Phase 1: Query Execution
 - [ ] Stateless query execution
-- [ ] Integration with odata-mcp
+- [ ] Integration with sap-odata-mcp-universal
 - [ ] Basic aggregations
 - [ ] Cross-service joins
 

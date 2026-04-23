@@ -212,7 +212,7 @@ class MCPComplianceTester:
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python mcp_compliance_test.py <server-command>")
-        print("Example: python mcp_compliance_test.py ./odata-mcp")
+        print("Example: python mcp_compliance_test.py ./sap-odata-mcp-universal")
         sys.exit(1)
     
     server_command = " ".join(sys.argv[1:])

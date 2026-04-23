@@ -49,7 +49,7 @@ make build
 The built binary includes version information:
 
 ```bash
-./odata-mcp --version
+./sap-odata-mcp-universal --version
 ```
 
 This will display the version, commit hash, and build time.

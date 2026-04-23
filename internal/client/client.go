@@ -5,10 +5,11 @@ package client
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
-	"github.com/zmcp/odata-mcp/internal/constants"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/constants"
 )
 
 // Context key for HTTP headers passed from MCP server
@@ -31,8 +32,12 @@ type ODataClient struct {
 
 // NewODataClient creates a new OData client
 func NewODataClient(baseURL string, verbose bool) *ODataClient {
-	// Ensure base URL ends with /
-	if !strings.HasSuffix(baseURL, "/") {
+	if parsed, err := url.Parse(baseURL); err == nil {
+		if !strings.HasSuffix(parsed.Path, "/") {
+			parsed.Path += "/"
+		}
+		baseURL = parsed.String()
+	} else if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
 	}
 

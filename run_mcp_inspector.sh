@@ -2,10 +2,10 @@
 
 echo "=== MCP Inspector Setup Guide ==="
 echo
-echo "To use the official MCP Inspector with odata-mcp:"
+echo "To use the official MCP Inspector with sap-odata-mcp-universal:"
 echo
 echo "1. Install and run the inspector:"
-echo "   npx @modelcontextprotocol/inspector ./odata-mcp"
+echo "   npx @modelcontextprotocol/inspector ./sap-odata-mcp-universal"
 echo
 echo "2. This will open a web UI at http://localhost:5173"
 echo
@@ -16,14 +16,14 @@ echo "   - View request/response logs"
 echo "   - Debug any issues"
 echo
 echo "Alternative: Use CLI mode for automated testing:"
-echo "   npx @modelcontextprotocol/inspector --cli ./odata-mcp --method tools/list"
+echo "   npx @modelcontextprotocol/inspector --cli ./sap-odata-mcp-universal --method tools/list"
 echo
 echo "=== Quick Local Test ==="
 echo "Running a quick local protocol test..."
 echo
 
 # Quick protocol test
-echo '{"jsonrpc":"2.0","id":"test","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"clientInfo":{"name":"inspector","version":"1.0.0"}}}' | ./odata-mcp 2>&1 | python3 -c "
+echo '{"jsonrpc":"2.0","id":"test","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"clientInfo":{"name":"inspector","version":"1.0.0"}}}' | ./sap-odata-mcp-universal 2>&1 | python3 -c "
 import sys
 import json
 try:

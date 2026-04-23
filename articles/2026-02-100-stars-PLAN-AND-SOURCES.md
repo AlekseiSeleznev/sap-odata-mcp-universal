@@ -22,7 +22,7 @@
   "created": "2025-06-12T08:14:02Z"
 }
 ```
-**Source:** `gh api repos/oisee/odata_mcp_go`
+**Source:** `gh api repos/AlekseiSeleznev/sap-odata-mcp-universal`
 
 ### Release Timeline (11 Releases)
 | Version | Date | Key Features |
@@ -59,7 +59,7 @@
 **PR #26 Quote (from body):**
 > "Addresses 10 open GitHub issues... Reduces tool count by 95-99% (157 → 1 tool). Reduces context usage by 96-98% (~37K → ~900 tokens). Fixes 'context rot' with large services."
 
-**Source:** https://github.com/oisee/odata_mcp_go/pull/26
+**Source:** https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/pull/26
 
 ### Louis-Philippe Perras (@lpperras)
 - **GitHub:** https://github.com/lpperras
@@ -69,7 +69,7 @@
 **PR #24 Quote:**
 > "This PR adds a new feature allows the MCP server to forward any headers sent by the MCP client to the OData endpoint. This can be useful if you are using a secured OData endpoint with custom headers..."
 
-**Source:** https://github.com/oisee/odata_mcp_go/pull/24
+**Source:** https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/pull/24
 
 ---
 
@@ -84,7 +84,7 @@
 **Quote from Issue:**
 > "When defining two OData at the same time in the configuration, for a S4H Cloud solution, the MCP is not responding. If I isolate them it's working (one by one). Can you please check if it's related to the number of tools overall? API_SALES_ORDER_SRV gives: 113 tools while API_BUSINESS_PARTNER are 372."
 
-**Source:** https://github.com/oisee/odata_mcp_go/issues/14
+**Source:** https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/issues/14
 
 ### Root Cause Analysis (from docs/008)
 > "User configured two OData services totaling 485 tools. Claude reported 'no API available.' Root cause: LLMs have practical limits on tool count (~128). Exceeding this causes: Context rot (degraded reasoning), Tool selection failures, High token consumption (~14,000 tokens for schemas)"
@@ -110,7 +110,7 @@ Standard mode:  157 tools (total_tools: 157)
 Universal mode:   1 tool  (total_tools: 1)
 Reduction: 99.4%
 ```
-**Source:** `./odata-mcp --trace --universal https://services.odata.org/V2/Northwind/Northwind.svc/`
+**Source:** `./sap-odata-mcp-universal --trace --universal https://services.odata.org/V2/Northwind/Northwind.svc/`
 
 ### Commit Messages (Filipp's commits)
 
@@ -201,16 +201,16 @@ Reduction: 99.4%
 ## 7. KEY LINKS
 
 ### Repository
-- **Main:** https://github.com/oisee/odata_mcp_go
-- **Release v1.6.0:** https://github.com/oisee/odata_mcp_go/releases/tag/v1.6.0
-- **PR #26:** https://github.com/oisee/odata_mcp_go/pull/26
-- **PR #24:** https://github.com/oisee/odata_mcp_go/pull/24
-- **Issue #14:** https://github.com/oisee/odata_mcp_go/issues/14
+- **Main:** https://github.com/AlekseiSeleznev/sap-odata-mcp-universal
+- **Release v1.6.0:** https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/releases/tag/v1.6.0
+- **PR #26:** https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/pull/26
+- **PR #24:** https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/pull/24
+- **Issue #14:** https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/issues/14
 
 ### Documentation
 - **Universal Tool Architecture:** `docs/008-issue-14-universal-tool-architecture.md`
 - **Security Analysis:** `docs/004-security-analysis-http-transport.md`
-- **README:** https://github.com/oisee/odata_mcp_go/blob/main/README.md
+- **README:** https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/blob/main/README.md
 
 ### Previous Articles
 - **Original Article:** "I Built the Universal OData ↔ MCP Bridge" (June 23, 2025)

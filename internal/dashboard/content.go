@@ -6,79 +6,131 @@ import (
 	"html"
 	"strings"
 
-	"github.com/zmcp/odata-mcp/internal/models"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
 )
 
 var dashboardTranslations = map[string]map[string]string{
 	"ru": {
-		"title":               "sap-odata-mcp-universal",
-		"subtitle":            "MCP-шлюз для SAP OData",
-		"h_systems":           "Системы SAP",
-		"h_add_system":        "Новое подключение",
-		"h_edit_system":       "Редактирование",
-		"conn_name":           "Имя соединения",
-		"system_name":         "Имя системы",
-		"service_url":         "URL сервиса",
-		"sap_client":          "SAP клиент",
-		"login":               "Логин",
-		"password":            "Пароль",
-		"allow_write":         "Разрешить запись",
-		"default_system":      "По умолчанию",
-		"btn_connect":         "Подключить",
-		"btn_save":            "Сохранить",
-		"btn_cancel":          "Отмена",
-		"btn_refresh":         "Обновить",
-		"btn_edit":            "Изменить",
-		"btn_delete":          "Удалить",
-		"btn_docs":            "Документация",
-		"connected":           "Подключена",
-		"disconnected":        "Отключена",
-		"rw":                  "Чтение/Запись",
-		"ro":                  "Только чтение",
-		"no_systems":          "Нет подключённых SAP систем. Добавьте первую.",
-		"confirm_delete":      "Удалить соединение",
-		"confirm_delete_text": "Вы уверены? Активное SAP OData подключение будет удалено.",
-		"fill_fields":         "Заполните обязательные поля: имя, система, URL сервиса, логин, пароль",
-		"msg_connected":       "Подключено",
-		"msg_disconnected":    "Отключено",
-		"msg_saved":           "Сохранено",
-		"msg_default_set":     "Установлено по умолчанию",
-		"msg_error":           "Ошибка",
+		"title":            "sap-odata-mcp-universal",
+		"subtitle":         "MCP-шлюз для SAP OData",
+		"h_tree":           "Системы и сущности",
+		"h_system":         "Система SAP",
+		"h_services":       "Каталог сервисов",
+		"h_entity":         "Сущность",
+		"h_operation":      "Операция",
+		"btn_docs":         "Документация",
+		"btn_refresh":      "Обновить",
+		"btn_new_system":   "Новая система",
+		"btn_new_entity":   "Новая сущность",
+		"btn_new_op":       "Новая операция",
+		"btn_new_service":  "Новый сервис",
+		"btn_save":         "Сохранить",
+		"btn_delete":       "Удалить",
+		"btn_activate":     "Сделать активной",
+		"btn_discover":     "Обновить метаданные",
+		"system_name":      "Имя системы",
+		"base_url":         "Базовый URL SAP",
+		"sap_client":       "Мандант / SAP клиент",
+		"login":            "Логин",
+		"password":         "Пароль",
+		"allow_write":      "Разрешить запись",
+		"service_name":     "Имя сервиса",
+		"service_url":      "URL сервиса",
+		"entity_label":     "Имя сущности",
+		"entity_desc":      "Описание",
+		"op_verb":          "Метод",
+		"op_service":       "Сервис",
+		"op_entityset":     "Entity Set",
+		"active":           "Активна",
+		"connected":        "Подключена",
+		"disconnected":     "Неактивна",
+		"rw":               "Чтение/Запись",
+		"ro":               "Только чтение",
+		"empty_tree":       "Систем пока нет. Создайте первую систему SAP.",
+		"empty_services":   "Сервисы ещё не добавлены.",
+		"empty_entities":   "Сущности ещё не добавлены.",
+		"empty_ops":        "Операции ещё не добавлены.",
+		"select_system":    "Сначала выберите систему.",
+		"select_entity":    "Сначала выберите сущность.",
+		"select_service":   "Выберите сервис",
+		"select_entityset": "Выберите entity set",
+		"msg_saved":        "Сохранено",
+		"msg_deleted":      "Удалено",
+		"msg_activated":    "Система активирована",
+		"msg_error":        "Ошибка",
+		"msg_discovery":    "Метаданные обновлены",
+		"confirm_delete":   "Подтвердите удаление",
+		"verb_get":         "GET",
+		"verb_list":        "LIST",
+		"verb_create":      "POST",
+		"verb_update":      "PATCH/PUT",
+		"verb_delete":      "DELETE",
+		"tool_name":        "MCP tool",
+		"service_note":     "Сервис используется в операциях сущностей. Один system-profile может включать много сервисов.",
+		"footer":           "sap-odata-mcp-universal — GitHub — MIT License",
+		"discovery_sets":   "Доступные Entity Sets",
+		"discovery_hint":   "После выбора сервиса UI подтягивает metadata и подсказывает entity sets и capabilities.",
 	},
 	"en": {
-		"title":               "sap-odata-mcp-universal",
-		"subtitle":            "MCP gateway for SAP OData",
-		"h_systems":           "SAP Systems",
-		"h_add_system":        "New Connection",
-		"h_edit_system":       "Edit Connection",
-		"conn_name":           "Connection Name",
-		"system_name":         "System Name",
-		"service_url":         "Service URL",
-		"sap_client":          "SAP Client",
-		"login":               "Login",
-		"password":            "Password",
-		"allow_write":         "Allow writes",
-		"default_system":      "Default",
-		"btn_connect":         "Connect",
-		"btn_save":            "Save",
-		"btn_cancel":          "Cancel",
-		"btn_refresh":         "Refresh",
-		"btn_edit":            "Edit",
-		"btn_delete":          "Delete",
-		"btn_docs":            "Documentation",
-		"connected":           "Connected",
-		"disconnected":        "Disconnected",
-		"rw":                  "Read/Write",
-		"ro":                  "Read-only",
-		"no_systems":          "No SAP systems connected yet. Add your first one.",
-		"confirm_delete":      "Delete connection",
-		"confirm_delete_text": "Are you sure? The active SAP OData connection will be removed.",
-		"fill_fields":         "Fill required fields: name, system, service URL, login, password",
-		"msg_connected":       "Connected",
-		"msg_disconnected":    "Disconnected",
-		"msg_saved":           "Saved",
-		"msg_default_set":     "Set as default",
-		"msg_error":           "Error",
+		"title":            "sap-odata-mcp-universal",
+		"subtitle":         "MCP gateway for SAP OData",
+		"h_tree":           "Systems and entities",
+		"h_system":         "SAP system",
+		"h_services":       "Service catalog",
+		"h_entity":         "Entity",
+		"h_operation":      "Operation",
+		"btn_docs":         "Documentation",
+		"btn_refresh":      "Refresh",
+		"btn_new_system":   "New system",
+		"btn_new_entity":   "New entity",
+		"btn_new_op":       "New operation",
+		"btn_new_service":  "New service",
+		"btn_save":         "Save",
+		"btn_delete":       "Delete",
+		"btn_activate":     "Make active",
+		"btn_discover":     "Refresh metadata",
+		"system_name":      "System name",
+		"base_url":         "SAP base URL",
+		"sap_client":       "Client / mandant",
+		"login":            "Login",
+		"password":         "Password",
+		"allow_write":      "Allow writes",
+		"service_name":     "Service name",
+		"service_url":      "Service URL",
+		"entity_label":     "Entity label",
+		"entity_desc":      "Description",
+		"op_verb":          "Method",
+		"op_service":       "Service",
+		"op_entityset":     "Entity set",
+		"active":           "Active",
+		"connected":        "Connected",
+		"disconnected":     "Inactive",
+		"rw":               "Read/Write",
+		"ro":               "Read-only",
+		"empty_tree":       "No systems configured yet. Create the first SAP system.",
+		"empty_services":   "No services added yet.",
+		"empty_entities":   "No entities added yet.",
+		"empty_ops":        "No operations added yet.",
+		"select_system":    "Select a system first.",
+		"select_entity":    "Select an entity first.",
+		"select_service":   "Select a service",
+		"select_entityset": "Select an entity set",
+		"msg_saved":        "Saved",
+		"msg_deleted":      "Deleted",
+		"msg_activated":    "System activated",
+		"msg_error":        "Error",
+		"msg_discovery":    "Metadata refreshed",
+		"confirm_delete":   "Confirm deletion",
+		"verb_get":         "GET",
+		"verb_list":        "LIST",
+		"verb_create":      "POST",
+		"verb_update":      "PATCH/PUT",
+		"verb_delete":      "DELETE",
+		"tool_name":        "MCP tool",
+		"service_note":     "Services are reused by entity operations. One system profile can aggregate multiple SAP OData services.",
+		"footer":           "sap-odata-mcp-universal — GitHub — MIT License",
+		"discovery_sets":   "Available entity sets",
+		"discovery_hint":   "When you choose a service, the UI loads metadata and suggests entity sets and capabilities.",
 	},
 }
 
@@ -90,8 +142,287 @@ func renderDashboard(lang string) (string, error) {
 		return "", err
 	}
 
+	body := applyTemplate(dashboardHTML, map[string]string{
+		"lang":        lang,
+		"subtitle":    t["subtitle"],
+		"ru_on":       onClass(lang == "ru"),
+		"en_on":       onClass(lang == "en"),
+		"btn_docs":    t["btn_docs"],
+		"btn_refresh": t["btn_refresh"],
+		"h_tree":      t["h_tree"],
+		"h_system":    t["h_system"],
+		"h_services":  t["h_services"],
+		"h_entity":    t["h_entity"],
+		"h_operation": t["h_operation"],
+		"t_json":      string(tJSON),
+		"footer":      t["footer"],
+	})
+	return body, nil
+}
+
+func renderDocs(lang string, ctx *models.DashboardDocumentationContext) string {
+	lang = normalizeLang(lang)
+	if lang == "en" {
+		return renderDocsEN(ctx)
+	}
+	return renderDocsRU(ctx)
+}
+
+func renderDocsRU(ctx *models.DashboardDocumentationContext) string {
 	return fmt.Sprintf(`<!DOCTYPE html>
-<html lang="%s">
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>sap-odata-mcp-universal docs</title><style>%s</style></head><body>
+<h1>sap-odata-mcp-universal</h1>
+<p>Иерархический dashboard для SAP OData. Здесь конфигурация строится не вокруг одного OData root, а вокруг бизнес-модели <code>System → Entity → Operation</code>.</p>
+
+<h2>1. Что именно настраивается</h2>
+<ul>
+<li><strong>System</strong>: одна SAP система, её логин/пароль, client/mandant и базовые ограничения на запись.</li>
+<li><strong>Service Catalog</strong>: набор OData сервисов, доступных внутри этой системы.</li>
+<li><strong>Entity</strong>: бизнес-сущность, например <code>Materials</code> или <code>BusinessPartners</code>.</li>
+<li><strong>Operation</strong>: конкретный binding вида <code>GET</code>, <code>LIST</code>, <code>POST</code>, <code>PATCH/PUT</code>, <code>DELETE</code>, который привязывается к выбранному сервису и entity set.</li>
+</ul>
+
+<h2>2. Зачем нужна такая модель</h2>
+<p>В SAP одна и та же бизнес-сущность часто разбита по разным OData сервисам. Например:</p>
+<pre><code>Materials.GET   -> MMIM_MATERIAL_DATA_SRV / MaterialHeaders
+Materials.POST  -> API_PRODUCT_SRV / A_Product</code></pre>
+<p>Старый flat-подход «одно подключение = один сервис» плохо описывает такой сценарий. Новый dashboard хранит общие credentials на уровне системы и даёт связать разные методы одной сущности с разными сервисами.</p>
+
+<h2>3. Базовый workflow</h2>
+<ol>
+<li>Создайте систему SAP через <code>%s</code>.</li>
+<li>Добавьте в неё OData сервисы через <code>%s</code>.</li>
+<li>Создайте сущность через <code>%s</code>.</li>
+<li>Для сущности добавьте операции через <code>%s</code>, выбирая сервис и entity set.</li>
+<li>Сделайте систему активной через <code>%s</code>. После этого runtime перестроит MCP tools под bindings активной системы.</li>
+</ol>
+
+<h2>4. Как runtime это исполняет</h2>
+<ul>
+<li>При активации системы backend очищает старые business-tools и строит новые tools на основе configured operations.</li>
+<li>Для каждого задействованного сервиса metadata кэшируются отдельно.</li>
+<li>Каждый MCP tool роутится напрямую в нужный OData service root через <code>client.ODataClient</code>.</li>
+<li>CSRF handling, basic auth и CRUD уже выполняются существующим OData client слоем автоматически.</li>
+</ul>
+
+<h2>5. HTTP API dashboard</h2>
+<table>
+<tr><th>Path</th><th>Method</th><th>Назначение</th></tr>
+<tr><td><code>%s</code></td><td>GET</td><td>Runtime status активной системы.</td></tr>
+<tr><td><code>%s</code></td><td>GET</td><td>Полное дерево систем, сервисов, сущностей и операций.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Создать или изменить system profile.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Удалить систему.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Сделать систему активной.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Создать или изменить сервис.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Удалить сервис.</td></tr>
+<tr><td><code>%s</code></td><td>GET</td><td>Загрузить metadata выбранного сервиса и список entity sets.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Создать или изменить сущность.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Удалить сущность.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Создать или изменить operation binding.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Удалить operation binding.</td></tr>
+</table>
+
+<h2>6. MCP endpoint</h2>
+<p>Сам MCP endpoint остаётся прежним: <code>%s</code>. Dashboard only управляет тем, какие tools публикуются на этом endpoint для активной системы.</p>
+
+<h2>7. Что попадает в tool names</h2>
+<p>Tool name строится из сущности, метода и system id. Пример:</p>
+<pre><code>materials_get_for_s4d-100
+materials_create_for_s4d-100</code></pre>
+<p>Если имя занято, backend добавляет числовой suffix.</p>
+
+<h2>8. Безопасность и хранение state</h2>
+<ul>
+<li>State file: <code>%s</code></li>
+<li>Пароли сохраняются для восстановления активной системы после перезапуска. На диске они не шифруются.</li>
+<li>Если HTTP transport открыт наружу, используйте MCP token, TLS и нормальные сетевые ограничения.</li>
+<li>В режиме <code>restricted</code> runtime не публикует mutating operations.</li>
+</ul>
+
+<h2>9. Практический пример</h2>
+<pre><code>System: S4D / client 100
+Services:
+  materials-read  -> .../MMIM_MATERIAL_DATA_SRV/
+  products-write  -> .../API_PRODUCT_SRV/
+Entity:
+  Materials
+Operations:
+  GET    -> materials-read / MaterialHeaders
+  LIST   -> materials-read / MaterialHeaders
+  POST   -> products-write / A_Product
+  PATCH  -> products-write / A_Product</code></pre>
+
+<h2>10. Что делать, если operation не сохраняется</h2>
+<ul>
+<li>Проверьте credentials системы.</li>
+<li>Проверьте, что сервис добавлен в Service Catalog той же системы.</li>
+<li>Используйте refresh metadata, чтобы убедиться, что entity set реально существует.</li>
+<li>Если система <code>restricted</code>, mutating operations сохранятся, но публиковаться не будут до переключения в <code>unrestricted</code>.</li>
+</ul>
+
+</body></html>`,
+		docStyle,
+		html.EscapeString(ctx.SaveSystemPath),
+		html.EscapeString(ctx.SaveServicePath),
+		html.EscapeString(ctx.SaveEntityPath),
+		html.EscapeString(ctx.SaveOperationPath),
+		html.EscapeString(ctx.ActivateSystemPath),
+		html.EscapeString(ctx.StatusPath),
+		html.EscapeString(ctx.SystemsPath),
+		html.EscapeString(ctx.SaveSystemPath),
+		html.EscapeString(ctx.DeleteSystemPath),
+		html.EscapeString(ctx.ActivateSystemPath),
+		html.EscapeString(ctx.SaveServicePath),
+		html.EscapeString(ctx.DeleteServicePath),
+		html.EscapeString(ctx.DiscoveryPath),
+		html.EscapeString(ctx.SaveEntityPath),
+		html.EscapeString(ctx.DeleteEntityPath),
+		html.EscapeString(ctx.SaveOperationPath),
+		html.EscapeString(ctx.DeleteOperationPath),
+		html.EscapeString(ctx.MCPPath),
+		html.EscapeString(ctx.StateFile),
+	)
+}
+
+func renderDocsEN(ctx *models.DashboardDocumentationContext) string {
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>sap-odata-mcp-universal docs</title><style>%s</style></head><body>
+<h1>sap-odata-mcp-universal</h1>
+<p>A hierarchical SAP OData dashboard. Configuration is centered around <code>System → Entity → Operation</code> instead of a single flat OData service profile.</p>
+
+<h2>1. Configuration model</h2>
+<ul>
+<li><strong>System</strong>: SAP landscape, credentials, client/mandant, and default write policy.</li>
+<li><strong>Service Catalog</strong>: all OData service roots available inside the selected system.</li>
+<li><strong>Entity</strong>: a business concept such as <code>Materials</code>.</li>
+<li><strong>Operation</strong>: a concrete business method such as <code>GET</code>, <code>LIST</code>, <code>POST</code>, <code>PATCH/PUT</code>, or <code>DELETE</code> mapped to a service and entity set.</li>
+</ul>
+
+<h2>2. Why this exists</h2>
+<p>In real SAP landscapes, one business object is frequently split across several OData services. The dashboard keeps credentials at system level and lets one business entity route different methods to different services.</p>
+
+<h2>3. Typical workflow</h2>
+<ol>
+<li>Create a system profile via <code>%s</code>.</li>
+<li>Add one or more services via <code>%s</code>.</li>
+<li>Create a business entity via <code>%s</code>.</li>
+<li>Add operation bindings via <code>%s</code>.</li>
+<li>Activate the system with <code>%s</code>. MCP tools are rebuilt for that active system only.</li>
+</ol>
+
+<h2>4. Runtime behavior</h2>
+<ul>
+<li>The backend clears previous business tools and rebuilds them from configured bindings.</li>
+<li>Metadata are cached per service root.</li>
+<li>Each tool routes directly to the corresponding OData service through <code>client.ODataClient</code>.</li>
+<li>CSRF handling, auth, and CRUD behavior are reused from the existing OData client implementation.</li>
+</ul>
+
+<h2>5. Dashboard HTTP API</h2>
+<table>
+<tr><th>Path</th><th>Method</th><th>Purpose</th></tr>
+<tr><td><code>%s</code></td><td>GET</td><td>Runtime status for the active system.</td></tr>
+<tr><td><code>%s</code></td><td>GET</td><td>Full hierarchy of systems, services, entities, and operations.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Create or update a system.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Delete a system.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Activate a system.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Create or update a service.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Delete a service.</td></tr>
+<tr><td><code>%s</code></td><td>GET</td><td>Load service metadata and entity set suggestions.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Create or update an entity.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Delete an entity.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Create or update an operation binding.</td></tr>
+<tr><td><code>%s</code></td><td>POST</td><td>Delete an operation binding.</td></tr>
+</table>
+
+<h2>6. MCP endpoint</h2>
+<p>The MCP endpoint remains <code>%s</code>. The dashboard only changes which tools are published there for the active SAP system.</p>
+
+<h2>7. Tool naming</h2>
+<pre><code>materials_get_for_s4d-100
+materials_create_for_s4d-100</code></pre>
+
+<h2>8. State and security</h2>
+<ul>
+<li>State file: <code>%s</code></li>
+<li>Passwords are persisted for restart recovery and are not encrypted on disk.</li>
+<li>For remote HTTP exposure, use MCP token, TLS, and proper network boundaries.</li>
+<li>In <code>restricted</code> mode, mutating operations are not published as MCP tools.</li>
+</ul>
+
+<h2>9. Example</h2>
+<pre><code>System: S4D / client 100
+Services:
+  materials-read  -> .../MMIM_MATERIAL_DATA_SRV/
+  products-write  -> .../API_PRODUCT_SRV/
+Entity:
+  Materials
+Operations:
+  GET    -> materials-read / MaterialHeaders
+  LIST   -> materials-read / MaterialHeaders
+  POST   -> products-write / A_Product
+  PATCH  -> products-write / A_Product</code></pre>
+
+</body></html>`,
+		docStyle,
+		html.EscapeString(ctx.SaveSystemPath),
+		html.EscapeString(ctx.SaveServicePath),
+		html.EscapeString(ctx.SaveEntityPath),
+		html.EscapeString(ctx.SaveOperationPath),
+		html.EscapeString(ctx.ActivateSystemPath),
+		html.EscapeString(ctx.StatusPath),
+		html.EscapeString(ctx.SystemsPath),
+		html.EscapeString(ctx.SaveSystemPath),
+		html.EscapeString(ctx.DeleteSystemPath),
+		html.EscapeString(ctx.ActivateSystemPath),
+		html.EscapeString(ctx.SaveServicePath),
+		html.EscapeString(ctx.DeleteServicePath),
+		html.EscapeString(ctx.DiscoveryPath),
+		html.EscapeString(ctx.SaveEntityPath),
+		html.EscapeString(ctx.DeleteEntityPath),
+		html.EscapeString(ctx.SaveOperationPath),
+		html.EscapeString(ctx.DeleteOperationPath),
+		html.EscapeString(ctx.MCPPath),
+		html.EscapeString(ctx.StateFile),
+	)
+}
+
+func applyTemplate(input string, values map[string]string) string {
+	replacements := make([]string, 0, len(values)*2)
+	for key, value := range values {
+		replacements = append(replacements, "{{"+key+"}}", value)
+	}
+	return strings.NewReplacer(replacements...).Replace(input)
+}
+
+func onClass(enabled bool) string {
+	if enabled {
+		return "on"
+	}
+	return ""
+}
+
+func normalizeLang(lang string) string {
+	if strings.EqualFold(strings.TrimSpace(lang), "en") {
+		return "en"
+	}
+	return "ru"
+}
+
+const docStyle = `body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f0;padding:20px;max-width:980px;margin:0 auto;line-height:1.6;font-size:.92rem}
+h1,h2{color:#f8fafc}h1{margin-bottom:14px}h2{margin-top:24px;margin-bottom:10px}
+p,ul,ol,table,pre{margin-bottom:14px}ul,ol{padding-left:22px}
+code,pre{font-family:'SF Mono','Cascadia Code',monospace}
+pre{background:#111827;border:1px solid #334155;border-radius:8px;padding:14px;overflow:auto}
+table{width:100%%;border-collapse:collapse}
+th,td{border:1px solid #334155;padding:8px;vertical-align:top}
+th{background:#1e293b;text-align:left}
+a{color:#38bdf8;text-decoration:none}a:hover{text-decoration:underline}`
+
+const dashboardHTML = `<!DOCTYPE html>
+<html lang="{{lang}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -99,7 +430,7 @@ func renderDashboard(lang string) (string, error) {
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#f8fafc;height:100vh;display:flex;flex-direction:column;overflow:hidden}
-.content{flex:1;overflow-y:auto}
+.content{flex:1;overflow-y:auto;padding:20px}
 .header{background:#1e293b;border-bottom:1px solid #334155;padding:8px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;flex-shrink:0}
 .header-left{display:flex;align-items:center;gap:10px}
 .header h1{font-size:1.05rem;color:#f8fafc;font-weight:700}
@@ -109,670 +440,377 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .lang-sw a{padding:3px 8px;font-size:.7rem;color:#94a3b8;display:block;text-decoration:none}
 .lang-sw a.on{background:#334155;color:#f8fafc}
 .btn{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:5px;font-size:.78rem;cursor:pointer;border:1px solid #475569;background:#1e293b;color:#94a3b8;text-decoration:none;transition:.15s}
-.btn:hover{background:#334155;color:#f8fafc}
-.btn-d{color:#ef4444;border-color:rgba(239,68,68,.25)}
-.btn-d:hover{background:rgba(239,68,68,.1);color:#ef4444;border-color:#ef4444}
-.btn-ds{background:#991b1b;border-color:#991b1b;color:#fff}
-.btn-ds:hover{background:#b91c1c}
-.content{padding:20px}
+.btn:hover{background:#334155;color:#f8fafc}.btn-d{color:#ef4444;border-color:rgba(239,68,68,.25)}.btn-d:hover{background:rgba(239,68,68,.1);color:#ef4444;border-color:#ef4444}
 .card{background:#1e293b;border-radius:8px;padding:12px;border:1px solid #334155;overflow:hidden;margin-bottom:14px}
 .card h2{font-size:.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-weight:600}
-.db-item{background:#0f172a;border:1px solid #334155;border-radius:6px;padding:10px 12px;margin-bottom:8px;transition:border-color .15s}
-.db-item:last-child{margin-bottom:0}
-.db-item:hover{border-color:#475569}
-.db-row{display:flex;align-items:center;gap:10px}
-.dot{width:8px;height:8px;border-radius:50%%;flex-shrink:0}
-.dot.ok{background:#22c55e}
-.dot.err{background:#ef4444}
-.db-info{flex:1;min-width:0}
-.db-name{font-weight:600;font-size:.88rem}
-.db-details{color:#94a3b8;font-size:.75rem;font-family:'SF Mono','Cascadia Code',monospace;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.db-badges{display:flex;gap:5px;margin-top:4px;flex-wrap:wrap}
-.db-actions{display:flex;gap:4px;flex-shrink:0}
+.cols{display:grid;grid-template-columns:1.05fr 1.2fr;gap:14px;align-items:start}
+.stack{display:grid;gap:14px}
+.tree-item{background:#0f172a;border:1px solid #334155;border-radius:6px;padding:10px 12px;margin-bottom:8px}
+.tree-item:last-child,.svc-item:last-child,.op-mini:last-child{margin-bottom:0}
+.tree-row{display:flex;align-items:flex-start;gap:10px}
+.tree-main{flex:1}
+.tree-name{font-weight:600;font-size:.88rem}
+.tree-details{color:#94a3b8;font-size:.75rem;font-family:'SF Mono','Cascadia Code',monospace;margin-top:2px}
+.entity-node{margin-top:10px;padding-top:10px;border-top:1px solid #1e293b}
+.entity-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.entity-title{font-size:.81rem;font-weight:600;color:#e2e8f0}
+.entity-desc{font-size:.72rem;color:#94a3b8;margin-top:2px}
+.op-mini{margin-top:6px;padding:7px 8px;border:1px solid #334155;border-radius:6px;background:#111827}
+.op-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .badge{display:inline-flex;align-items:center;padding:1px 6px;border-radius:3px;font-size:.62rem;font-weight:600}
-.badge-g{background:rgba(34,197,94,.12);color:#22c55e}
-.badge-r{background:rgba(239,68,68,.12);color:#ef4444}
-.badge-b{background:rgba(59,130,246,.12);color:#3b82f6}
-.badge-c{background:#164e63;color:#22d3ee}
-.rd{display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.72rem;color:#94a3b8;background:none;border:0;padding:0}
-.rd:hover{color:#cbd5e1}
-.rb{width:14px;height:14px;border-radius:50%%;border:2px solid #475569;display:flex;align-items:center;justify-content:center;transition:.15s;flex-shrink:0}
-.rb.on{border-color:#22d3ee}
-.rb.on::after{content:'';width:7px;height:7px;border-radius:50%%;background:#22d3ee}
-.rd:hover .rb{border-color:#22d3ee}
-.toggle{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.78rem;color:#cbd5e1;user-select:none}
-.toggle input{display:none}
-.toggle-track{width:34px;height:18px;border-radius:9px;background:#475569;position:relative;transition:.2s;flex-shrink:0}
-.toggle-track::after{content:'';width:14px;height:14px;border-radius:50%%;background:#94a3b8;position:absolute;top:2px;left:2px;transition:.2s}
-.toggle input:checked+.toggle-track{background:#22c55e}
-.toggle input:checked+.toggle-track::after{left:18px;background:#fff}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.form-group{display:flex;flex-direction:column;gap:3px}
-.form-group.full{grid-column:1/-1}
+.badge-g{background:rgba(34,197,94,.12);color:#22c55e}.badge-r{background:rgba(239,68,68,.12);color:#ef4444}.badge-b{background:rgba(59,130,246,.12);color:#3b82f6}.badge-c{background:#164e63;color:#22d3ee}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.form-group{display:flex;flex-direction:column;gap:3px}.form-group.full{grid-column:1/-1}
 .form-group label{font-size:.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
-input{padding:5px 8px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#e2e8f0;font-size:.8rem;transition:border .15s;width:100%%;-moz-appearance:textfield}
-input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-input:focus{outline:none;border-color:#38bdf8}
-.btn:focus-visible,.lang-sw a:focus-visible,input:focus-visible,.rd:focus-visible{outline:2px solid #38bdf8;outline-offset:2px}
-.form-actions{display:flex;gap:6px;justify-content:flex-end;margin-top:10px}
+input,select,textarea{padding:5px 8px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#e2e8f0;font-size:.8rem;transition:border .15s;width:100%%}
+textarea{min-height:76px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#38bdf8}
+.form-actions{display:flex;gap:6px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap}
+.toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.svc-item{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid #334155;border-radius:6px;background:#0f172a;margin-bottom:8px}
+.svc-main{flex:1;min-width:0}
 .empty{text-align:center;padding:20px;color:#64748b;font-size:.82rem}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center}
-.modal{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:20px;width:480px;max-width:92%%}
-.modal h3{font-size:.88rem;margin-bottom:14px;color:#f8fafc}
-.modal p{color:#cbd5e1}
-.modal-actions{display:flex;gap:6px;justify-content:flex-end;margin-top:14px}
-.toast-msg{position:fixed;top:50%%;left:50%%;transform:translate(-50%%,-50%%);background:#164e63;color:#22d3ee;padding:14px 24px;border-radius:8px;font-size:.9rem;z-index:999;max-width:500px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.5);pointer-events:none}
-.toast-err{background:#7f1d1d;color:#fca5a5}
-.content::-webkit-scrollbar{width:8px}
-.content::-webkit-scrollbar-track{background:#0f172a}
-.content::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}
-.content::-webkit-scrollbar-thumb:hover{background:#475569}
-.content{scrollbar-width:thin;scrollbar-color:#334155 #0f172a}
-.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
-.footer{padding:8px 20px;text-align:center;color:#475569;font-size:.68rem;border-top:1px solid #1e293b;flex-shrink:0}
-.footer a{color:#64748b;text-decoration:none}.footer a:hover{color:#94a3b8}
-@media(max-width:900px){.cols{grid-template-columns:1fr}}
-@media(max-width:600px){.content{padding:10px}.form-grid{grid-template-columns:1fr}.db-row{flex-wrap:wrap}.db-actions{width:100%%;justify-content:flex-end}}
+.toggle{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.78rem;color:#cbd5e1;user-select:none}.toggle input{display:none}.toggle-track{width:34px;height:18px;border-radius:9px;background:#475569;position:relative;transition:.2s;flex-shrink:0}.toggle-track::after{content:'';width:14px;height:14px;border-radius:50%%;background:#94a3b8;position:absolute;top:2px;left:2px;transition:.2s}.toggle input:checked+.toggle-track{background:#22c55e}.toggle input:checked+.toggle-track::after{left:18px;background:#fff}
+.footer{padding:8px 20px;text-align:center;color:#475569;font-size:.68rem;border-top:1px solid #1e293b;flex-shrink:0}.footer a{color:#64748b;text-decoration:none}.footer a:hover{color:#94a3b8}
+.toast-msg{position:fixed;top:50%%;left:50%%;transform:translate(-50%%,-50%%);background:#164e63;color:#22d3ee;padding:14px 24px;border-radius:8px;font-size:.9rem;z-index:999;max-width:500px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.5);pointer-events:none}.toast-err{background:#7f1d1d;color:#fca5a5}
+.hint{font-size:.72rem;color:#94a3b8;margin-top:6px}
+@media(max-width:1080px){.cols{grid-template-columns:1fr}.content{padding:12px}}
+@media(max-width:600px){.form-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="header">
   <div class="header-left">
-    <div><h1>sap-odata-mcp-universal</h1><span class="sub">%s</span></div>
+    <div><h1>sap-odata-mcp-universal</h1><span class="sub">{{subtitle}}</span></div>
   </div>
   <div class="header-right">
     <div class="lang-sw">
-      <a href="?lang=ru" class="%s">RU</a>
-      <a href="?lang=en" class="%s">EN</a>
+      <a href="?lang=ru" class="{{ru_on}}">RU</a>
+      <a href="?lang=en" class="{{en_on}}">EN</a>
     </div>
-    <a class="btn" href="/dashboard/docs?lang=%s" target="_blank">%s</a>
-    <button class="btn" onclick="loadSystems()">%s</button>
+    <a class="btn" href="/dashboard/docs?lang={{lang}}" target="_blank">{{btn_docs}}</a>
+    <button class="btn" onclick="loadAll()">{{btn_refresh}}</button>
   </div>
 </div>
 <div class="content">
-<div class="cols">
-  <div class="card">
-    <h2>%s</h2>
-    <div id="db-list" aria-live="polite"></div>
-  </div>
-  <div class="card">
-    <h2>%s</h2>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>%s *</label>
-        <input id="f-name">
+  <div class="cols">
+    <div class="card">
+      <h2>{{h_tree}}</h2>
+      <div class="toolbar">
+        <button class="btn" onclick="newSystem()">{{btn_new_system}}</button>
+        <button class="btn" onclick="newEntity()">{{btn_new_entity}}</button>
+        <button class="btn" onclick="newOperation()">{{btn_new_op}}</button>
       </div>
-      <div class="form-group">
-        <label>%s *</label>
-        <input id="f-system">
-      </div>
-      <div class="form-group full">
-        <label>%s *</label>
-        <input id="f-url" placeholder="https://host/sap/opu/odata/sap/SERVICE_SRV/">
-      </div>
-      <div class="form-group">
-        <label>%s</label>
-        <input id="f-client" placeholder="100">
-      </div>
-      <div class="form-group">
-        <label>%s *</label>
-        <input id="f-user" autocomplete="off" autocapitalize="off" spellcheck="false">
-      </div>
-      <div class="form-group full">
-        <label>%s *</label>
-        <input id="f-pass" type="password" autocomplete="new-password">
-      </div>
-      <div class="form-group full" style="margin-top:2px">
-        <label class="toggle">
-          <input type="checkbox" id="f-write">
-          <span class="toggle-track"></span>
-          %s
-        </label>
-      </div>
+      <div id="tree"></div>
     </div>
-    <div class="form-actions">
-      <button class="btn" onclick="connectSystem()">&#8594; %s</button>
+    <div class="stack">
+      <div class="card">
+        <h2>{{h_system}}</h2>
+        <div class="form-grid">
+          <div class="form-group"><label>{{system_name}}</label><input id="sys-name"></div>
+          <div class="form-group"><label>{{sap_client}}</label><input id="sys-client" placeholder="100"></div>
+          <div class="form-group full"><label>{{base_url}}</label><input id="sys-base" placeholder="http://s4d.msgplaut.com:8000"></div>
+          <div class="form-group"><label>{{login}}</label><input id="sys-user" autocomplete="off"></div>
+          <div class="form-group"><label>{{password}}</label><input id="sys-pass" type="password" autocomplete="new-password"></div>
+          <div class="form-group full"><label class="toggle"><input type="checkbox" id="sys-write"><span class="toggle-track"></span>{{allow_write}}</label></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn" onclick="saveSystem()">{{btn_save}}</button>
+          <button class="btn" onclick="activateSystem()">{{btn_activate}}</button>
+          <button class="btn btn-d" onclick="deleteSystem()">{{btn_delete}}</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>{{h_services}}</h2>
+        <div id="services"></div>
+        <div class="hint">{{service_note}}</div>
+        <div class="form-grid" style="margin-top:10px">
+          <div class="form-group"><label>{{service_name}}</label><input id="svc-name"></div>
+          <div class="form-group full"><label>{{service_url}}</label><input id="svc-url" placeholder="https://host/sap/opu/odata/sap/SERVICE_SRV/"></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn" onclick="saveService()">{{btn_save}}</button>
+          <button class="btn" onclick="discoverSelectedService()">{{btn_discover}}</button>
+          <button class="btn btn-d" onclick="deleteService()">{{btn_delete}}</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>{{h_entity}}</h2>
+        <div class="form-grid">
+          <div class="form-group"><label>{{entity_label}}</label><input id="ent-label"></div>
+          <div class="form-group full"><label>{{entity_desc}}</label><textarea id="ent-desc"></textarea></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn" onclick="saveEntity()">{{btn_save}}</button>
+          <button class="btn btn-d" onclick="deleteEntity()">{{btn_delete}}</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>{{h_operation}}</h2>
+        <div class="form-grid">
+          <div class="form-group"><label>{{op_verb}}</label><select id="op-verb"></select></div>
+          <div class="form-group"><label>{{op_service}}</label><select id="op-service"></select></div>
+          <div class="form-group full"><label>{{op_entityset}}</label><select id="op-entityset"></select></div>
+        </div>
+        <div id="discovery" class="hint">{{discovery_hint}}</div>
+        <div class="form-actions">
+          <button class="btn" onclick="saveOperation()">{{btn_save}}</button>
+          <button class="btn" onclick="refreshDiscovery()">{{btn_discover}}</button>
+          <button class="btn btn-d" onclick="deleteOperation()">{{btn_delete}}</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
-</div>
+<div class="footer"><a href="https://github.com/AlekseiSeleznev/sap-odata-mcp-universal" target="_blank">{{footer}}</a></div>
 <script>
-const T = %s;
+const T = {{t_json}};
+const VERBS = [
+  {value:'get', label:T.verb_get},
+  {value:'list', label:T.verb_list},
+  {value:'create', label:T.verb_create},
+  {value:'update', label:T.verb_update},
+  {value:'delete', label:T.verb_delete},
+];
+const state = {systems:[], status:null, selectedSystemId:'', selectedEntityId:'', selectedOperationId:'', editingServiceId:'', discovery:{}};
 
 function toast(msg, isErr) {
-  var d = document.createElement('div');
+  const d = document.createElement('div');
   d.className = 'toast-msg' + (isErr ? ' toast-err' : '');
   d.textContent = msg;
   document.body.appendChild(d);
-  setTimeout(function(){ d.remove() }, 3000);
+  setTimeout(() => d.remove(), 3000);
 }
-
 async function api(url, opts) {
-  try {
-    const r = await fetch(url, opts || {});
-    return await r.json();
-  } catch(e) {
-    toast(T.msg_error + ': ' + e.message, true);
-    return null;
-  }
+  const r = await fetch(url, opts || {});
+  return r.json();
 }
-
-function escHtml(s) {
-  var d = document.createElement('div');
+function esc(s) {
+  const d = document.createElement('div');
   d.appendChild(document.createTextNode(s || ''));
   return d.innerHTML;
 }
-
-function escAttr(s) {
-  return escHtml(s).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+function activeSystem() { return state.systems.find(x => x.id === state.selectedSystemId) || null; }
+function activeEntity() {
+  const sys = activeSystem();
+  return sys ? sys.entities.find(x => x.id === state.selectedEntityId) || null : null;
 }
-
-function accessModeLabel(mode) {
-  return mode === 'unrestricted' ? T.rw : T.ro;
+function activeOperation() {
+  const ent = activeEntity();
+  return ent ? ent.operations.find(x => x.id === state.selectedOperationId) || null : null;
 }
-
-function detailsLine(item) {
-  const parts = [item.system_name || '', item.safe_service_url || item.service_url || ''];
-  if (item.client) parts.push('client=' + item.client);
-  if (item.username) parts.push(item.username);
-  return parts.filter(Boolean).join(' | ');
-}
-
-async function loadSystems() {
-  const [items, status] = await Promise.all([api('/api/databases'), api('/api/status')]);
-  const list = document.getElementById('db-list');
-  const activeName = status?.active_default || '';
-
-  if (!items || items.length === 0) {
-    list.innerHTML = '<div class="empty">' + T.no_systems + '</div>';
-    return;
+function syncSelection() {
+  if (!state.systems.length) {
+    state.selectedSystemId = ''; state.selectedEntityId = ''; state.selectedOperationId = ''; state.editingServiceId = ''; return;
   }
-
-  list.innerHTML = items.map(function(item) {
-    const isDefault = item.name === activeName;
-    const eName = escHtml(item.name);
-    const eNameAttr = escAttr(item.name);
-    return '<div class="db-item">' +
-      '<div class="db-row">' +
-        '<div class="dot ' + (item.connected ? 'ok' : 'err') + '"></div>' +
-        '<div class="db-info">' +
-          '<div class="db-name">' + eName + '</div>' +
-          '<div class="db-details">' + escHtml(detailsLine(item)) + '</div>' +
-          '<div class="db-badges">' +
-            '<span class="badge ' + (item.connected ? 'badge-g' : 'badge-r') + '">' +
-              (item.connected ? T.connected : T.disconnected) + '</span>' +
-            '<span class="badge ' + (item.access_mode === 'unrestricted' ? 'badge-b' : 'badge-c') + '">' +
-              accessModeLabel(item.access_mode) + '</span>' +
-          '</div>' +
-        '</div>' +
-        '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">' +
-          '<button type="button" class="rd" aria-pressed="' + (isDefault ? 'true' : 'false') + '" onclick="setDefault(\'' + eNameAttr + '\')">' +
-            '<div class="rb ' + (isDefault ? 'on' : '') + '"></div>' +
-            '<span>' + T.default_system + '</span>' +
-          '</button>' +
-          '<div class="db-actions">' +
-            '<button class="btn" onclick="editSystem(\'' + eNameAttr + '\',\'' + escAttr(item.system_name) + '\',\'' + escAttr(item.service_url) + '\',\'' + escAttr(item.client || '') + '\',\'' + escAttr(item.username || '') + '\',\'' + escAttr(item.access_mode || '') + '\')">' + T.btn_edit + '</button>' +
-            '<button class="btn btn-d" onclick="confirmDelete(\'' + eNameAttr + '\')">' + T.btn_delete + '</button>' +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
+  if (!state.systems.some(x => x.id === state.selectedSystemId)) {
+    const active = state.systems.find(x => x.active) || state.systems[0];
+    state.selectedSystemId = active.id;
+  }
+  const sys = activeSystem();
+  if (!sys.entities.some(x => x.id === state.selectedEntityId)) {
+    state.selectedEntityId = sys.entities[0] ? sys.entities[0].id : '';
+  }
+  const ent = activeEntity();
+  if (!ent || !ent.operations.some(x => x.id === state.selectedOperationId)) {
+    state.selectedOperationId = ent && ent.operations[0] ? ent.operations[0].id : '';
+  }
+  if (state.editingServiceId && !sys.services.some(x => x.id === state.editingServiceId)) state.editingServiceId = '';
+}
+function modeLabel(mode) { return mode === 'unrestricted' ? T.rw : T.ro; }
+function opLabel(verb) {
+  const found = VERBS.find(x => x.value === verb);
+  return found ? found.label : verb.toUpperCase();
+}
+function systemDetails(sys) {
+  const parts = [];
+  if (sys.base_url) parts.push(sys.base_url);
+  if (sys.client) parts.push('client=' + sys.client);
+  if (sys.username) parts.push(sys.username);
+  return parts.join(' | ');
+}
+async function loadAll() {
+  const [systems, status] = await Promise.all([api('/api/systems'), api('/api/status')]);
+  state.systems = Array.isArray(systems) ? systems : [];
+  state.status = status || null;
+  syncSelection();
+  renderAll();
+}
+function renderAll() {
+  renderTree(); renderSystemForm(); renderServices(); renderEntityForm(); renderOperationForm();
+}
+function renderTree() {
+  const root = document.getElementById('tree');
+  if (!state.systems.length) { root.innerHTML = '<div class="empty">' + T.empty_tree + '</div>'; return; }
+  root.innerHTML = state.systems.map(sys => {
+    const sysBadges = [
+      '<span class="badge ' + (sys.connected ? 'badge-g' : 'badge-r') + '">' + (sys.connected ? T.connected : T.disconnected) + '</span>',
+      '<span class="badge ' + (sys.access_mode === 'unrestricted' ? 'badge-b' : 'badge-c') + '">' + modeLabel(sys.access_mode) + '</span>'
+    ].join(' ');
+    const entities = sys.entities.length ? sys.entities.map(ent => {
+      const ops = ent.operations.length ? ent.operations.map(op => '<div class="op-mini" onclick="selectOperation(\'' + esc(op.id) + '\')"><div class="op-row"><div><strong>' + opLabel(op.verb) + '</strong> <span style="color:#94a3b8">' + esc(op.entity_set) + '</span></div><div>' + (op.tool_name ? '<span class="badge badge-c">' + esc(op.tool_name) + '</span>' : '') + '</div></div></div>').join('') : '<div class="hint">' + T.empty_ops + '</div>';
+      return '<div class="entity-node">' +
+        '<div class="entity-head"><div onclick="selectEntity(\'' + esc(ent.id) + '\')"><div class="entity-title">' + esc(ent.label) + '</div><div class="entity-desc">' + esc(ent.description || '') + '</div></div></div>' +
+        ops + '</div>';
+    }).join('') : '<div class="hint">' + T.empty_entities + '</div>';
+    return '<div class="tree-item">' +
+      '<div class="tree-row"><div class="tree-main" onclick="selectSystem(\'' + esc(sys.id) + '\')"><div class="tree-name">' + esc(sys.name) + '</div><div class="tree-details">' + esc(systemDetails(sys)) + '</div><div style="margin-top:4px;display:flex;gap:5px;flex-wrap:wrap">' + sysBadges + (sys.active ? '<span class="badge badge-c">' + T.active + '</span>' : '') + '</div></div></div>' +
+      entities + '</div>';
   }).join('');
 }
-
-async function connectSystem() {
-  const payload = {
-    name: document.getElementById('f-name').value.trim(),
-    system_name: document.getElementById('f-system').value.trim(),
-    service_url: document.getElementById('f-url').value.trim(),
-    client: document.getElementById('f-client').value.trim(),
-    username: document.getElementById('f-user').value.trim(),
-    password: document.getElementById('f-pass').value,
-    access_mode: document.getElementById('f-write').checked ? 'unrestricted' : 'restricted'
-  };
-
-  if (!payload.name || !payload.system_name || !payload.service_url || !payload.username || !payload.password) {
-    toast(T.fill_fields, true);
+function renderSystemForm() {
+  const sys = activeSystem();
+  document.getElementById('sys-name').value = sys ? sys.name : '';
+  document.getElementById('sys-base').value = sys ? (sys.base_url || '') : '';
+  document.getElementById('sys-client').value = sys ? (sys.client || '') : '';
+  document.getElementById('sys-user').value = sys ? (sys.username || '') : '';
+  document.getElementById('sys-pass').value = '';
+  document.getElementById('sys-write').checked = !!(sys && sys.access_mode === 'unrestricted');
+}
+function renderServices() {
+  const sys = activeSystem();
+  const root = document.getElementById('services');
+  if (!sys) { root.innerHTML = '<div class="empty">' + T.select_system + '</div>'; return; }
+  if (!sys.services.length) root.innerHTML = '<div class="empty">' + T.empty_services + '</div>';
+  else root.innerHTML = sys.services.map(svc => '<div class="svc-item"><div class="svc-main" onclick="editService(\'' + esc(svc.id) + '\')"><div class="tree-name">' + esc(svc.name) + '</div><div class="tree-details">' + esc(svc.safe_service_url || svc.service_url) + '</div></div><div style="display:flex;gap:6px"><button class="btn" onclick="editService(\'' + esc(svc.id) + '\')">' + T.btn_save + '</button><button class="btn btn-d" onclick="deleteService(\'' + esc(svc.id) + '\')">' + T.btn_delete + '</button></div></div>').join('');
+  const editing = sys.services.find(x => x.id === state.editingServiceId) || null;
+  document.getElementById('svc-name').value = editing ? editing.name : '';
+  document.getElementById('svc-url').value = editing ? editing.service_url : '';
+}
+function renderEntityForm() {
+  const sys = activeSystem(); const ent = activeEntity();
+  document.getElementById('ent-label').value = ent ? ent.label : '';
+  document.getElementById('ent-desc').value = ent ? (ent.description || '') : '';
+  if (!sys) document.getElementById('ent-label').placeholder = T.select_system;
+}
+function renderOperationForm() {
+  const sys = activeSystem(); const ent = activeEntity(); const op = activeOperation();
+  const verbSel = document.getElementById('op-verb');
+  verbSel.innerHTML = VERBS.map(v => '<option value="' + v.value + '">' + v.label + '</option>').join('');
+  const serviceSel = document.getElementById('op-service');
+  if (!sys) {
+    serviceSel.innerHTML = '<option value="">' + T.select_system + '</option>';
+    document.getElementById('op-entityset').innerHTML = '<option value="">' + T.select_service + '</option>';
     return;
   }
-
-  const r = await api('/api/connect', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(payload)
-  });
-
-  if (!r || r.error) {
-    toast(T.msg_error + ': ' + (r?.error || 'unknown'), true);
-    return;
+  serviceSel.innerHTML = '<option value="">' + T.select_service + '</option>' + sys.services.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('');
+  if (op) {
+    verbSel.value = op.verb;
+    serviceSel.value = op.service_id;
+  } else if (sys.services[0]) {
+    serviceSel.value = sys.services[0].id;
   }
-
-  toast(T.msg_connected + ': ' + payload.name);
-  document.getElementById('f-name').value = '';
-  document.getElementById('f-system').value = '';
-  document.getElementById('f-url').value = '';
-  document.getElementById('f-client').value = '';
-  document.getElementById('f-user').value = '';
-  document.getElementById('f-pass').value = '';
-  document.getElementById('f-write').checked = false;
-  loadSystems();
-}
-
-async function setDefault(name) {
-  const r = await api('/api/switch', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ name: name })
-  });
-  if (!r || r.error) {
-    toast(T.msg_error + ': ' + (r?.error || 'unknown'), true);
-    return;
+  if (serviceSel.value && !state.discovery[state.selectedSystemId + '::' + serviceSel.value]) {
+    discoverService(state.selectedSystemId, serviceSel.value).then(() => renderOperationForm());
   }
-  toast(T.msg_default_set + ': ' + name);
-  loadSystems();
+  populateEntitySetOptions(serviceSel.value, op ? op.entity_set : '');
 }
-
-function editSystem(name, systemName, serviceURL, client, username, accessMode) {
-  var ov = document.createElement('div');
-  ov.className = 'overlay';
-  ov.innerHTML =
-    '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="edit-dialog-title">' +
-      '<h3 id="edit-dialog-title">' + T.h_edit_system + '</h3>' +
-      '<div class="form-grid">' +
-        '<div class="form-group"><label>' + T.conn_name + '</label><input id="e-name" value="' + escAttr(name) + '"></div>' +
-        '<div class="form-group"><label>' + T.system_name + '</label><input id="e-system" value="' + escAttr(systemName) + '"></div>' +
-        '<div class="form-group full"><label>' + T.service_url + '</label><input id="e-url" value="' + escAttr(serviceURL) + '"></div>' +
-        '<div class="form-group"><label>' + T.sap_client + '</label><input id="e-client" value="' + escAttr(client) + '"></div>' +
-        '<div class="form-group"><label>' + T.login + '</label><input id="e-user" value="' + escAttr(username) + '" autocomplete="off" autocapitalize="off" spellcheck="false"></div>' +
-        '<div class="form-group full"><label>' + T.password + '</label><input id="e-pass" type="password" placeholder="••••••••" autocomplete="new-password"></div>' +
-        '<div class="form-group full" style="margin-top:2px">' +
-          '<label class="toggle">' +
-            '<input type="checkbox" id="e-write" ' + (accessMode === 'unrestricted' ? 'checked' : '') + '>' +
-            '<span class="toggle-track"></span>' +
-            T.allow_write +
-          '</label>' +
-        '</div>' +
-      '</div>' +
-      '<div class="modal-actions">' +
-        '<button class="btn" onclick="this.closest(\'.overlay\').remove()">' + T.btn_cancel + '</button>' +
-        '<button class="btn" onclick="saveEdit(\'' + escAttr(name) + '\')">' + T.btn_save + '</button>' +
-      '</div>' +
-    '</div>';
-  document.body.appendChild(ov);
-  ov.addEventListener('click', function(e) { if (e.target === ov) ov.remove(); });
+function populateEntitySetOptions(serviceId, selected) {
+  const sel = document.getElementById('op-entityset');
+  const key = state.selectedSystemId + '::' + serviceId;
+  const discovery = state.discovery[key];
+  const options = discovery && discovery.entity_sets ? discovery.entity_sets : [];
+  if (!serviceId) { sel.innerHTML = '<option value="">' + T.select_service + '</option>'; return; }
+  sel.innerHTML = '<option value="">' + T.select_entityset + '</option>' + options.map(x => '<option value="' + esc(x.name) + '">' + esc(x.name) + '</option>').join('');
+  if (selected) sel.value = selected;
+  document.getElementById('discovery').innerHTML = options.length ? '<strong>' + T.discovery_sets + ':</strong> ' + options.map(x => esc(x.name)).join(', ') : T.discovery_hint;
 }
-
-async function saveEdit(oldName) {
-  const payload = {
-    old_name: oldName,
-    name: document.getElementById('e-name').value.trim(),
-    system_name: document.getElementById('e-system').value.trim(),
-    service_url: document.getElementById('e-url').value.trim(),
-    client: document.getElementById('e-client').value.trim(),
-    username: document.getElementById('e-user').value.trim(),
-    password: document.getElementById('e-pass').value,
-    access_mode: document.getElementById('e-write').checked ? 'unrestricted' : 'restricted'
-  };
-
-  if (!payload.name || !payload.system_name || !payload.service_url || !payload.username) {
-    toast(T.fill_fields, true);
-    return;
-  }
-
-  const r = await api('/api/edit', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(payload)
-  });
-  if (!r || r.error) {
-    toast(T.msg_error + ': ' + (r?.error || 'unknown'), true);
-    return;
-  }
-
-  document.querySelector('.overlay').remove();
-  toast(T.msg_saved + ': ' + payload.name);
-  loadSystems();
+function selectSystem(id) { state.selectedSystemId = id; state.selectedEntityId = ''; state.selectedOperationId = ''; state.editingServiceId = ''; syncSelection(); renderAll(); }
+function selectEntity(id) { state.selectedEntityId = id; state.selectedOperationId = ''; syncSelection(); renderAll(); }
+function selectOperation(id) { state.selectedOperationId = id; syncSelection(); renderAll(); }
+function newSystem() { state.selectedSystemId = ''; state.selectedEntityId = ''; state.selectedOperationId = ''; state.editingServiceId = ''; renderAll(); }
+function newEntity() { if (!activeSystem()) { toast(T.select_system, true); return; } state.selectedEntityId = ''; state.selectedOperationId = ''; renderAll(); }
+function newOperation() { if (!activeEntity()) { toast(T.select_entity, true); return; } state.selectedOperationId = ''; renderAll(); }
+function editService(id) { state.editingServiceId = id; renderServices(); }
+async function saveSystem() {
+  const payload = { old_id: activeSystem() ? activeSystem().id : '', name: document.getElementById('sys-name').value.trim(), base_url: document.getElementById('sys-base').value.trim(), client: document.getElementById('sys-client').value.trim(), username: document.getElementById('sys-user').value.trim(), password: document.getElementById('sys-pass').value, access_mode: document.getElementById('sys-write').checked ? 'unrestricted' : 'restricted' };
+  const r = await api('/api/system/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  if (!r || r.error || r.ok === false) return toast(T.msg_error + ': ' + ((r && (r.error || r.message)) || 'unknown'), true);
+  toast(T.msg_saved); await loadAll();
 }
-
-function confirmDelete(name) {
-  var ov = document.createElement('div');
-  ov.className = 'overlay';
-  ov.innerHTML =
-    '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-text" style="width:360px;text-align:center">' +
-      '<h3 id="delete-dialog-title">' + T.confirm_delete + ' "' + escHtml(name) + '"?</h3>' +
-      '<p id="delete-dialog-text" style="font-size:.82rem;margin-bottom:14px">' + T.confirm_delete_text + '</p>' +
-      '<div style="display:flex;gap:6px;justify-content:center">' +
-        '<button class="btn" onclick="this.closest(\'.overlay\').remove()">' + T.btn_cancel + '</button>' +
-        '<button class="btn btn-ds" onclick="doDelete(\'' + escAttr(name) + '\')">' + T.btn_delete + '</button>' +
-      '</div>' +
-    '</div>';
-  document.body.appendChild(ov);
-  ov.addEventListener('click', function(e) { if (e.target === ov) ov.remove(); });
+async function activateSystem() {
+  const sys = activeSystem(); if (!sys) return toast(T.select_system, true);
+  const r = await api('/api/system/activate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({system_id: sys.id})});
+  if (!r || r.error || r.ok === false) return toast(T.msg_error + ': ' + ((r && (r.error || r.message)) || 'unknown'), true);
+  toast(T.msg_activated); await loadAll();
 }
-
-async function doDelete(name) {
-  document.querySelector('.overlay').remove();
-  const r = await api('/api/disconnect', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ name: name })
-  });
-  if (!r || r.error) {
-    toast(T.msg_error + ': ' + (r?.error || 'unknown'), true);
-    return;
-  }
-  toast(T.msg_disconnected + ': ' + name);
-  loadSystems();
+async function deleteSystem() {
+  const sys = activeSystem(); if (!sys) return toast(T.select_system, true);
+  if (!confirm(T.confirm_delete + ': ' + sys.name)) return;
+  const r = await api('/api/system/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id: sys.id})});
+  if (!r || r.error || r.ok === false) return toast(T.msg_error + ': ' + ((r && (r.error || r.message)) || 'unknown'), true);
+  toast(T.msg_deleted); state.selectedSystemId=''; await loadAll();
 }
-
-loadSystems();
+async function saveService() {
+  const sys = activeSystem(); if (!sys) return toast(T.select_system, true);
+  const payload = {system_id: sys.id, old_id: state.editingServiceId || '', name: document.getElementById('svc-name').value.trim(), service_url: document.getElementById('svc-url').value.trim()};
+  const r = await api('/api/service/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  if (!r || r.error || r.ok === false) return toast(T.msg_error + ': ' + ((r && (r.error || r.message)) || 'unknown'), true);
+  toast(T.msg_saved); state.editingServiceId=''; await loadAll();
+}
+async function deleteService(id) {
+  const sys = activeSystem(); if (!sys) return toast(T.select_system, true);
+  const target = id || state.editingServiceId; if (!target) return;
+  if (!confirm(T.confirm_delete)) return;
+  const r = await api('/api/service/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({system_id: sys.id, service_id: target})});
+  if (!r || r.error || r.ok === false) return toast(T.msg_error + ': ' + ((r && (r.error || r.message)) || 'unknown'), true);
+  toast(T.msg_deleted); state.editingServiceId=''; await loadAll();
+}
+async function discoverSelectedService() {
+  const sys = activeSystem(); if (!sys) return toast(T.select_system, true);
+  const id = state.editingServiceId || document.getElementById('op-service').value;
+  if (!id) return toast(T.select_service, true);
+  await discoverService(sys.id, id); toast(T.msg_discovery); renderOperationForm();
+}
+async function refreshDiscovery() {
+  const sys = activeSystem(); if (!sys) return toast(T.select_system, true);
+  const serviceId = document.getElementById('op-service').value;
+  if (!serviceId) return toast(T.select_service, true);
+  await discoverService(sys.id, serviceId); renderOperationForm(); toast(T.msg_discovery);
+}
+async function discoverService(systemId, serviceId) {
+  const data = await api('/api/service/discover?system_id=' + encodeURIComponent(systemId) + '&service_id=' + encodeURIComponent(serviceId));
+  if (data && !data.error) state.discovery[systemId + '::' + serviceId] = data;
+  else toast(T.msg_error + ': ' + ((data && data.error) || 'unknown'), true);
+}
+document.getElementById('op-service').addEventListener('change', async function() {
+  const sys = activeSystem(); if (!sys || !this.value) return populateEntitySetOptions('', '');
+  if (!state.discovery[sys.id + '::' + this.value]) await discoverService(sys.id, this.value);
+  populateEntitySetOptions(this.value, '');
+});
+async function saveEntity() {
+  const sys = activeSystem(); if (!sys) return toast(T.select_system, true);
+  const ent = activeEntity();
+  const payload = {system_id: sys.id, old_id: ent ? ent.id : '', label: document.getElementById('ent-label').value.trim(), description: document.getElementById('ent-desc').value.trim()};
+  const r = await api('/api/entity/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  if (!r || r.error || r.ok === false) return toast(T.msg_error + ': ' + ((r && (r.error || r.message)) || 'unknown'), true);
+  toast(T.msg_saved); await loadAll();
+}
+async function deleteEntity() {
+  const sys = activeSystem(); const ent = activeEntity(); if (!sys || !ent) return toast(T.select_entity, true);
+  if (!confirm(T.confirm_delete + ': ' + ent.label)) return;
+  const r = await api('/api/entity/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({system_id: sys.id, entity_id: ent.id})});
+  if (!r || r.error || r.ok === false) return toast(T.msg_error + ': ' + ((r && (r.error || r.message)) || 'unknown'), true);
+  toast(T.msg_deleted); state.selectedEntityId=''; await loadAll();
+}
+async function saveOperation() {
+  const sys = activeSystem(); const ent = activeEntity(); if (!sys || !ent) return toast(T.select_entity, true);
+  const op = activeOperation();
+  const payload = {system_id: sys.id, entity_id: ent.id, old_id: op ? op.id : '', verb: document.getElementById('op-verb').value, service_id: document.getElementById('op-service').value, entity_set: document.getElementById('op-entityset').value, mode: 'generated', enabled: true};
+  const r = await api('/api/operation/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  if (!r || r.error || r.ok === false) return toast(T.msg_error + ': ' + ((r && (r.error || r.message)) || 'unknown'), true);
+  toast(T.msg_saved); await loadAll();
+}
+async function deleteOperation() {
+  const sys = activeSystem(); const ent = activeEntity(); const op = activeOperation();
+  if (!sys || !ent || !op) return toast(T.empty_ops, true);
+  if (!confirm(T.confirm_delete + ': ' + opLabel(op.verb))) return;
+  const r = await api('/api/operation/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({system_id: sys.id, entity_id: ent.id, operation_id: op.id})});
+  if (!r || r.error || r.ok === false) return toast(T.msg_error + ': ' + ((r && (r.error || r.message)) || 'unknown'), true);
+  toast(T.msg_deleted); state.selectedOperationId=''; await loadAll();
+}
+loadAll();
 </script>
-<div class="footer">
-sap-odata-mcp-universal &mdash;
-<a href="https://github.com/AlekseiSeleznev/sap-odata-mcp-universal">GitHub</a> &mdash;
-<a href="https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/blob/main/LICENSE">MIT License</a>
-</div>
-</body>
-</html>`,
-		lang,
-		html.EscapeString(t["subtitle"]),
-		onClass(lang == "ru"),
-		onClass(lang == "en"),
-		lang,
-		html.EscapeString(t["btn_docs"]),
-		html.EscapeString(t["btn_refresh"]),
-		html.EscapeString(t["h_systems"]),
-		html.EscapeString(t["h_add_system"]),
-		html.EscapeString(t["conn_name"]),
-		html.EscapeString(t["system_name"]),
-		html.EscapeString(t["service_url"]),
-		html.EscapeString(t["sap_client"]),
-		html.EscapeString(t["login"]),
-		html.EscapeString(t["password"]),
-		html.EscapeString(t["allow_write"]),
-		html.EscapeString(t["btn_connect"]),
-		string(tJSON),
-	), nil
-}
-
-func renderDocs(lang string, ctx *models.DashboardDocumentationContext) string {
-	lang = normalizeLang(lang)
-
-	if lang == "en" {
-		return fmt.Sprintf(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>sap-odata-mcp-universal — Documentation</title><style>%s</style></head><body>
-<a class="back" href="/dashboard?lang=en">&larr; Dashboard</a>
-<h1>sap-odata-mcp-universal</h1>
-<div class="sub">MCP gateway for SAP OData with a bilingual connection dashboard</div>
-<h2>Contents</h2>
-<ul>
-<li><a href="#e1">1. Overview</a></li>
-<li><a href="#e2">2. Startup modes</a></li>
-<li><a href="#e3">3. Dashboard workflow</a></li>
-<li><a href="#e4">4. Connection parameters</a></li>
-<li><a href="#e5">5. Connect Codex and other MCP clients</a></li>
-<li><a href="#e6">6. Persistence and active system switching</a></li>
-<li><a href="#e7">7. HTTP endpoints</a></li>
-<li><a href="#e8">8. Security notes</a></li>
-<li><a href="#e9">9. Troubleshooting</a></li>
-</ul>
-<h2 id="e1">1. Overview</h2>
-<p>This dashboard is designed to manage multiple SAP systems exposed through OData and authenticated with login/password. It replaces the old status-centric page with a PostgreSQL-style connection manager UI.</p>
-<ul>
-<li>Exact two-column dashboard layout modeled after <code>postgres-mcp-universal</code></li>
-<li>Saved SAP OData connection profiles with persistent state on disk</li>
-<li>Switchable active default system without restarting the HTTP bridge</li>
-<li>Bilingual UI and documentation: Russian and English</li>
-<li>Per-connection access mode: <code>unrestricted</code> or <code>restricted</code></li>
-</ul>
-<h2 id="e2">2. Startup modes</h2>
-<p>The HTTP dashboard can start even when no initial <code>--service</code> value is provided. This is the intended mode for operating multiple SAP systems through the dashboard.</p>
-<ul>
-<li>Transport: <code>%s</code></li>
-<li>HTTP address: <code>%s</code></li>
-<li>MCP endpoint: <code>%s</code></li>
-<li>Health endpoint: <code>%s</code></li>
-<li>Supports empty startup: <code>%t</code></li>
-</ul>
-<p>For <code>stdio</code> usage, you still normally launch the binary with a concrete OData service URL because there is no dashboard in that mode.</p>
-<h2 id="e3">3. Dashboard workflow</h2>
-<ol>
-<li>Open <code>%s</code>.</li>
-<li>Create a new SAP OData connection by specifying a connection name, SAP system name, service URL, optional SAP client, login, and password.</li>
-<li>Choose whether the MCP bridge should expose write-capable tools for that profile.</li>
-<li>Press <code>Connect</code>. The bridge fetches metadata immediately and rebuilds its MCP tools for the chosen SAP system.</li>
-<li>Use the radio-style <code>Default</code> selector on the left to switch the active system later.</li>
-<li>Use <code>Edit</code> to update a saved profile and <code>Delete</code> to remove it.</li>
-</ol>
-<h2 id="e4">4. Connection parameters</h2>
-<table><tr><th>Field</th><th>Description</th></tr>
-<tr><td><code>Connection Name</code></td><td>User-facing dashboard label for the saved profile.</td></tr>
-<tr><td><code>System Name</code></td><td>Business name of the SAP landscape or environment, for example <code>S4HANA DEV</code>.</td></tr>
-<tr><td><code>Service URL</code></td><td>Root URL of the SAP OData service, for example <code>https://host/sap/opu/odata/sap/API_SALES_ORDER_SRV/</code>.</td></tr>
-<tr><td><code>SAP Client</code></td><td>Optional <code>sap-client</code> value. When provided, the dashboard appends it to the service URL query string.</td></tr>
-<tr><td><code>Login</code></td><td>Basic-auth username used by the bridge for metadata loading and tool execution.</td></tr>
-<tr><td><code>Password</code></td><td>Basic-auth password. During editing, leaving it blank keeps the previously stored password.</td></tr>
-<tr><td><code>Allow writes</code></td><td>If enabled, the bridge exposes modifying tools when the metadata supports them. If disabled, the profile is forced into read-only mode.</td></tr>
-</table>
-<h2 id="e5">5. Connect Codex and other MCP clients</h2>
-<p>Once an SAP system is active in the dashboard, MCP clients use the regular HTTP transport. The current route for this server is <code>%s</code>.</p>
-<pre><code>codex mcp add sap-odata-universal --url http://localhost:3000%s</code></pre>
-<p>If you prefer <code>stdio</code> mode for Codex, keep using a dedicated binary configuration for a single target system. The dashboard is primarily for HTTP operation and system switching.</p>
-<h2 id="e6">6. Persistence and active system switching</h2>
-<p>Saved dashboard profiles are persisted in <code>%s</code>. The state file stores:</p>
-<ul>
-<li>active default connection name</li>
-<li>saved SAP OData profiles</li>
-<li>connection-level access mode</li>
-<li>credential fields required for reconnecting on restart</li>
-</ul>
-<p>On startup, the dashboard attempts to restore the active profile and rebuild the bridge automatically. Current active connection: <code>%s</code>. Total saved connections: <code>%d</code>.</p>
-<h2 id="e7">7. HTTP endpoints</h2>
-<table><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr>
-<tr><td><code>%s</code></td><td>GET</td><td>Main bilingual dashboard UI.</td></tr>
-<tr><td><code>%s</code></td><td>GET</td><td>Built-in detailed documentation page.</td></tr>
-<tr><td><code>%s</code></td><td>GET</td><td>Active connection summary used by the dashboard JS.</td></tr>
-<tr><td><code>%s</code></td><td>GET</td><td>List saved SAP OData connections.</td></tr>
-<tr><td><code>%s</code></td><td>POST</td><td>Create and immediately activate a connection.</td></tr>
-<tr><td><code>%s</code></td><td>POST</td><td>Remove a saved connection; if it was active, the bridge switches to the next saved one or clears itself.</td></tr>
-<tr><td><code>%s</code></td><td>POST</td><td>Update a saved connection and re-activate it if needed.</td></tr>
-<tr><td><code>%s</code></td><td>POST</td><td>Switch the active default SAP system.</td></tr>
-<tr><td><code>%s</code></td><td>GET</td><td>Transport health probe.</td></tr>
-<tr><td><code>%s</code></td><td>POST</td><td>MCP transport endpoint.</td></tr>
-</table>
-<h2 id="e8">8. Security notes</h2>
-<ul>
-<li>The dashboard stores credentials so it can reconnect after restart. Protect the host and the state file permissions.</li>
-<li>The HTTP transport should still be protected with token/TLS when exposed beyond localhost.</li>
-<li>The dashboard only hides passwords from the UI list; it does not encrypt them in the persisted state file.</li>
-<li>Use restricted mode for landscapes where writes must never be exposed through MCP.</li>
-</ul>
-<h2 id="e9">9. Troubleshooting</h2>
-<ul>
-<li>If a connection fails during <code>Connect</code>, verify the OData root URL and credentials first.</li>
-<li>If metadata loads but write tools are missing, the SAP service metadata may mark the entity sets as non-creatable/non-updatable/non-deletable.</li>
-<li>If the wrong client data appears, set the <code>SAP Client</code> field explicitly so the dashboard adds <code>sap-client</code>.</li>
-<li>If the bridge starts with no active tools, check whether the saved active profile can still authenticate.</li>
-</ul>
-</body></html>`,
-			docStyle,
-			html.EscapeString(ctx.Transport),
-			html.EscapeString(ctx.HTTPAddr),
-			html.EscapeString(ctx.MCPPath),
-			html.EscapeString(ctx.HealthPath),
-			ctx.SupportsEmptyStartup,
-			html.EscapeString(ctx.DashboardPath),
-			html.EscapeString(ctx.HTTPAddr),
-			html.EscapeString(ctx.MCPPath),
-			html.EscapeString(ctx.StateFile),
-			html.EscapeString(emptyFallback(ctx.ActiveConnection)),
-			ctx.TotalConnections,
-			html.EscapeString(ctx.DashboardPath),
-			html.EscapeString(ctx.DocumentationPath),
-			html.EscapeString(ctx.StatusPath),
-			html.EscapeString(ctx.ListPath),
-			html.EscapeString(ctx.ConnectPath),
-			html.EscapeString(ctx.DisconnectPath),
-			html.EscapeString(ctx.EditPath),
-			html.EscapeString(ctx.SwitchPath),
-			html.EscapeString(ctx.HealthPath),
-			html.EscapeString(ctx.MCPPath),
-		)
-	}
-
-	return fmt.Sprintf(`<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>sap-odata-mcp-universal — Документация</title><style>%s</style></head><body>
-<a class="back" href="/dashboard?lang=ru">&larr; Dashboard</a>
-<h1>sap-odata-mcp-universal</h1>
-<div class="sub">MCP-шлюз для SAP OData с двуязычным dashboard для управления подключениями</div>
-<h2>Оглавление</h2>
-<ul>
-<li><a href="#r1">1. Обзор</a></li>
-<li><a href="#r2">2. Режимы запуска</a></li>
-<li><a href="#r3">3. Сценарий работы через dashboard</a></li>
-<li><a href="#r4">4. Параметры подключения</a></li>
-<li><a href="#r5">5. Подключение Codex и других MCP-клиентов</a></li>
-<li><a href="#r6">6. Хранение состояния и переключение активной системы</a></li>
-<li><a href="#r7">7. HTTP endpoints</a></li>
-<li><a href="#r8">8. Замечания по безопасности</a></li>
-<li><a href="#r9">9. Диагностика проблем</a></li>
-</ul>
-<h2 id="r1">1. Обзор</h2>
-<p>Этот dashboard предназначен для управления несколькими SAP системами, доступными по OData и аутентифицируемыми по логину и паролю. Он заменяет прежнюю страницу со статусами и метаданными на connection-manager в стиле <code>postgres-mcp-universal</code>.</p>
-<ul>
-<li>Та же двухколоночная компоновка dashboard, что и в postgres-референсе</li>
-<li>Постоянный реестр SAP OData профилей на диске</li>
-<li>Переключение активной системы без перезапуска HTTP bridge</li>
-<li>Двуязычный интерфейс и документация: русский и английский</li>
-<li>Режим доступа на уровне подключения: <code>unrestricted</code> или <code>restricted</code></li>
-</ul>
-<h2 id="r2">2. Режимы запуска</h2>
-<p>HTTP dashboard может стартовать даже без начального <code>--service</code>. Это целевой режим для сценария, где один bridge обслуживает несколько SAP систем через web UI.</p>
-<ul>
-<li>Transport: <code>%s</code></li>
-<li>HTTP address: <code>%s</code></li>
-<li>MCP endpoint: <code>%s</code></li>
-<li>Health endpoint: <code>%s</code></li>
-<li>Поддержка пустого старта: <code>%t</code></li>
-</ul>
-<p>Для <code>stdio</code> режима по-прежнему обычно нужен конкретный <code>service URL</code>, потому что dashboard в этом транспортe не используется.</p>
-<h2 id="r3">3. Сценарий работы через dashboard</h2>
-<ol>
-<li>Откройте <code>%s</code>.</li>
-<li>Создайте новое SAP OData подключение: имя соединения, имя системы, URL сервиса, необязательный SAP client, логин и пароль.</li>
-<li>Выберите, должен ли bridge отдавать write-capable инструменты для этого профиля.</li>
-<li>Нажмите <code>Подключить</code>. Bridge немедленно загрузит metadata и перестроит MCP tools под выбранную SAP систему.</li>
-<li>Позже переключайте активную систему через radio-style селектор <code>По умолчанию</code> в левом списке.</li>
-<li>Используйте <code>Изменить</code> для обновления сохранённого профиля и <code>Удалить</code> для его удаления.</li>
-</ol>
-<h2 id="r4">4. Параметры подключения</h2>
-<table><tr><th>Поле</th><th>Описание</th></tr>
-<tr><td><code>Имя соединения</code></td><td>Пользовательская метка профиля в dashboard.</td></tr>
-<tr><td><code>Имя системы</code></td><td>Бизнес-имя SAP-ландшафта, например <code>S4HANA DEV</code>.</td></tr>
-<tr><td><code>URL сервиса</code></td><td>Корневой URL SAP OData сервиса, например <code>https://host/sap/opu/odata/sap/API_SALES_ORDER_SRV/</code>.</td></tr>
-<tr><td><code>SAP клиент</code></td><td>Необязательное значение <code>sap-client</code>. Если оно задано, dashboard автоматически добавляет его в query string URL.</td></tr>
-<tr><td><code>Логин</code></td><td>Имя пользователя basic auth для загрузки metadata и выполнения инструментов.</td></tr>
-<tr><td><code>Пароль</code></td><td>Пароль basic auth. При редактировании пустое значение сохраняет ранее сохранённый пароль.</td></tr>
-<tr><td><code>Разрешить запись</code></td><td>Если включено, bridge отдаёт модифицирующие инструменты там, где это позволяет metadata. Если выключено, профиль принудительно переводится в read-only режим.</td></tr>
-</table>
-<h2 id="r5">5. Подключение Codex и других MCP-клиентов</h2>
-<p>Когда активная SAP система выбрана в dashboard, MCP-клиенты используют обычный HTTP transport. Текущий маршрут сервера: <code>%s</code>.</p>
-<pre><code>codex mcp add sap-odata-universal --url http://localhost:3000%s</code></pre>
-<p>Если вы предпочитаете <code>stdio</code> для Codex, используйте отдельную бинарную конфигурацию под одну целевую систему. Dashboard в первую очередь предназначен для HTTP-режима и быстрого переключения систем.</p>
-<h2 id="r6">6. Хранение состояния и переключение активной системы</h2>
-<p>Сохранённые dashboard-профили лежат в <code>%s</code>. В state file сохраняются:</p>
-<ul>
-<li>имя активного подключения по умолчанию</li>
-<li>сохранённые SAP OData профили</li>
-<li>режим доступа для каждого подключения</li>
-<li>credential-поля, необходимые для автопереподключения после рестарта</li>
-</ul>
-<p>На старте dashboard пытается восстановить активный профиль и автоматически перестроить bridge. Текущее активное подключение: <code>%s</code>. Всего сохранённых подключений: <code>%d</code>.</p>
-<h2 id="r7">7. HTTP endpoints</h2>
-<table><tr><th>Endpoint</th><th>Метод</th><th>Описание</th></tr>
-<tr><td><code>%s</code></td><td>GET</td><td>Главный двуязычный dashboard.</td></tr>
-<tr><td><code>%s</code></td><td>GET</td><td>Встроенная подробная документация.</td></tr>
-<tr><td><code>%s</code></td><td>GET</td><td>Сводка по активному подключению для dashboard JS.</td></tr>
-<tr><td><code>%s</code></td><td>GET</td><td>Список сохранённых SAP OData подключений.</td></tr>
-<tr><td><code>%s</code></td><td>POST</td><td>Создать и сразу активировать подключение.</td></tr>
-<tr><td><code>%s</code></td><td>POST</td><td>Удалить сохранённое подключение; если оно было активным, bridge переключится на следующее или очистится.</td></tr>
-<tr><td><code>%s</code></td><td>POST</td><td>Обновить сохранённый профиль и при необходимости переактивировать его.</td></tr>
-<tr><td><code>%s</code></td><td>POST</td><td>Переключить активную SAP систему.</td></tr>
-<tr><td><code>%s</code></td><td>GET</td><td>Проверка здоровья transport-слоя.</td></tr>
-<tr><td><code>%s</code></td><td>POST</td><td>MCP transport endpoint.</td></tr>
-</table>
-<h2 id="r8">8. Замечания по безопасности</h2>
-<ul>
-<li>Dashboard хранит учётные данные, чтобы переподключаться после рестарта. Защищайте host и права доступа к state file.</li>
-<li>HTTP transport по-прежнему нужно закрывать token/TLS, если вы публикуете его вне localhost.</li>
-<li>Dashboard скрывает пароль в списке UI, но не шифрует его в сохранённом state file.</li>
-<li>Для ландшафтов, где запись недопустима, используйте restricted режим.</li>
-</ul>
-<h2 id="r9">9. Диагностика проблем</h2>
-<ul>
-<li>Если подключение падает на <code>Подключить</code>, сначала проверьте корневой OData URL и учётные данные.</li>
-<li>Если metadata загружается, но write-tools нет, SAP service metadata может помечать entity sets как non-creatable/non-updatable/non-deletable.</li>
-<li>Если приходят данные не из того клиента, явно задайте поле <code>SAP клиент</code>, чтобы dashboard добавил <code>sap-client</code>.</li>
-<li>Если bridge стартует без активных tools, проверьте, что сохранённый активный профиль всё ещё проходит аутентификацию.</li>
-</ul>
-</body></html>`,
-		docStyle,
-		html.EscapeString(ctx.Transport),
-		html.EscapeString(ctx.HTTPAddr),
-		html.EscapeString(ctx.MCPPath),
-		html.EscapeString(ctx.HealthPath),
-		ctx.SupportsEmptyStartup,
-		html.EscapeString(ctx.DashboardPath),
-		html.EscapeString(ctx.HTTPAddr),
-		html.EscapeString(ctx.MCPPath),
-		html.EscapeString(ctx.StateFile),
-		html.EscapeString(emptyFallback(ctx.ActiveConnection)),
-		ctx.TotalConnections,
-		html.EscapeString(ctx.DashboardPath),
-		html.EscapeString(ctx.DocumentationPath),
-		html.EscapeString(ctx.StatusPath),
-		html.EscapeString(ctx.ListPath),
-		html.EscapeString(ctx.ConnectPath),
-		html.EscapeString(ctx.DisconnectPath),
-		html.EscapeString(ctx.EditPath),
-		html.EscapeString(ctx.SwitchPath),
-		html.EscapeString(ctx.HealthPath),
-		html.EscapeString(ctx.MCPPath),
-	)
-}
-
-const docStyle = `body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f0;padding:20px;max-width:900px;margin:0 auto;line-height:1.6;font-size:.88rem}
-a{color:#38bdf8;text-decoration:none}a:hover{text-decoration:underline}
-h1{font-size:1.3rem;margin-bottom:4px}h2{font-size:1rem;margin-top:24px;margin-bottom:8px;color:#f8fafc;border-bottom:1px solid #334155;padding-bottom:4px}
-h3{font-size:.88rem;margin-top:16px;margin-bottom:4px;color:#cbd5e1}
-.sub{color:#64748b;font-size:.78rem}
-code{background:#1e293b;padding:1px 5px;border-radius:3px;font-size:.82rem;color:#38bdf8}
-pre{background:#1e293b;padding:12px;border-radius:6px;overflow-x:auto;font-size:.8rem;border:1px solid #334155;margin:8px 0}
-pre code{background:none;padding:0;color:#e2e8f0}
-table{width:100%;border-collapse:collapse;margin:8px 0;font-size:.82rem}
-th{text-align:left;padding:6px 8px;border-bottom:1px solid #334155;color:#94a3b8;font-size:.72rem;text-transform:uppercase}
-td{padding:6px 8px;border-bottom:1px solid rgba(51,65,85,.4)}
-td code{font-size:.78rem}
-.back{display:inline-block;margin-bottom:16px;font-size:.82rem}
-ul,ol{margin:4px 0 4px 20px}li{margin:2px 0}`
-
-func normalizeLang(lang string) string {
-	if strings.EqualFold(strings.TrimSpace(lang), "en") {
-		return "en"
-	}
-	return "ru"
-}
-
-func onClass(on bool) string {
-	if on {
-		return "on"
-	}
-	return ""
-}
-
-func emptyFallback(value string) string {
-	if strings.TrimSpace(value) == "" {
-		return "none"
-	}
-	return value
-}
+</body></html>`

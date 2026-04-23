@@ -51,7 +51,7 @@ jobs:
           ### Installation
           
           1. Download the appropriate binary for your platform
-          2. Make it executable (Linux/macOS): `chmod +x odata-mcp`
+          2. Make it executable (Linux/macOS): `chmod +x sap-odata-mcp-universal`
           3. Move to your PATH or reference directly in Claude Desktop config
           
           ### Checksums
@@ -76,15 +76,15 @@ jobs:
           - os: windows-latest
             goos: windows
             goarch: amd64
-            binary: odata-mcp-windows-amd64.exe
+            binary: sap-odata-mcp-universal-windows-amd64.exe
           - os: macos-latest
             goos: darwin
             goarch: amd64
-            binary: odata-mcp-darwin-amd64
+            binary: sap-odata-mcp-universal-darwin-amd64
           - os: macos-latest
             goos: darwin
             goarch: arm64
-            binary: odata-mcp-darwin-arm64
+            binary: sap-odata-mcp-universal-darwin-arm64
     
     steps:
     - name: Checkout code
@@ -115,7 +115,7 @@ jobs:
         BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
         
         go build -ldflags "-X main.Version=$VERSION -X main.Commit=$COMMIT -X main.BuildTime=$BUILD_TIME -w -s" \
-          -o ${{ matrix.binary }} cmd/odata-mcp/main.go
+          -o ${{ matrix.binary }} cmd/sap-odata-mcp-universal/main.go
         
         # Create archive
         if [ "${{ matrix.goos }}" = "windows" ]; then
@@ -177,15 +177,15 @@ jobs:
           
           1. Download the appropriate binary for your platform
           2. Extract the archive
-          3. Make it executable (Linux/macOS): `chmod +x odata-mcp`
+          3. Make it executable (Linux/macOS): `chmod +x sap-odata-mcp-universal`
           4. Move to your PATH or reference directly in Claude Desktop config
           
           ### Platform Binaries
           
-          - **Windows**: `odata-mcp-windows-amd64.exe.zip`
-          - **macOS Intel**: `odata-mcp-darwin-amd64.tar.gz`
-          - **macOS Apple Silicon**: `odata-mcp-darwin-arm64.tar.gz`
-          - **Linux**: `odata-mcp-linux-amd64` (from build artifacts)
+          - **Windows**: `sap-odata-mcp-universal-windows-amd64.exe.zip`
+          - **macOS Intel**: `sap-odata-mcp-universal-darwin-amd64.tar.gz`
+          - **macOS Apple Silicon**: `sap-odata-mcp-universal-darwin-arm64.tar.gz`
+          - **Linux**: `sap-odata-mcp-universal-linux-amd64` (from build artifacts)
           
           ### Checksums
           

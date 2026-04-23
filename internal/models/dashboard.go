@@ -2,6 +2,129 @@ package models
 
 import "time"
 
+type DashboardService struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	ServiceURL     string `json:"service_url"`
+	SafeServiceURL string `json:"safe_service_url"`
+}
+
+type DashboardOperation struct {
+	ID          string `json:"id"`
+	Verb        string `json:"verb"`
+	ServiceID   string `json:"service_id"`
+	ServiceName string `json:"service_name,omitempty"`
+	EntitySet   string `json:"entity_set"`
+	ToolName    string `json:"tool_name,omitempty"`
+	Mode        string `json:"mode"`
+	Enabled     bool   `json:"enabled"`
+}
+
+type DashboardEntity struct {
+	ID          string               `json:"id"`
+	Label       string               `json:"label"`
+	Description string               `json:"description,omitempty"`
+	Operations  []DashboardOperation `json:"operations"`
+}
+
+type DashboardSystem struct {
+	ID          string             `json:"id"`
+	Name        string             `json:"name"`
+	BaseURL     string             `json:"base_url,omitempty"`
+	Client      string             `json:"client,omitempty"`
+	Username    string             `json:"username"`
+	AccessMode  string             `json:"access_mode"`
+	Connected   bool               `json:"connected"`
+	Active      bool               `json:"active"`
+	Services    []DashboardService `json:"services"`
+	Entities    []DashboardEntity  `json:"entities"`
+	ServiceNote string             `json:"service_note,omitempty"`
+}
+
+type DashboardSystemUpsertRequest struct {
+	OldID      string `json:"old_id,omitempty"`
+	ID         string `json:"id,omitempty"`
+	Name       string `json:"name"`
+	BaseURL    string `json:"base_url"`
+	Client     string `json:"client"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	AccessMode string `json:"access_mode"`
+}
+
+type DashboardServiceUpsertRequest struct {
+	SystemID   string `json:"system_id"`
+	OldID      string `json:"old_id,omitempty"`
+	ID         string `json:"id,omitempty"`
+	Name       string `json:"name"`
+	ServiceURL string `json:"service_url"`
+}
+
+type DashboardEntityUpsertRequest struct {
+	SystemID     string `json:"system_id"`
+	OldID        string `json:"old_id,omitempty"`
+	ID           string `json:"id,omitempty"`
+	Label        string `json:"label"`
+	Description  string `json:"description"`
+	GenerateCRUD bool   `json:"generate_crud,omitempty"`
+}
+
+type DashboardOperationUpsertRequest struct {
+	SystemID  string `json:"system_id"`
+	EntityID  string `json:"entity_id"`
+	OldID     string `json:"old_id,omitempty"`
+	ID        string `json:"id,omitempty"`
+	Verb      string `json:"verb"`
+	ServiceID string `json:"service_id"`
+	EntitySet string `json:"entity_set"`
+	Mode      string `json:"mode"`
+	Enabled   bool   `json:"enabled"`
+}
+
+type DashboardDeleteRequest struct {
+	SystemID    string `json:"system_id,omitempty"`
+	EntityID    string `json:"entity_id,omitempty"`
+	OperationID string `json:"operation_id,omitempty"`
+	ServiceID   string `json:"service_id,omitempty"`
+	ID          string `json:"id,omitempty"`
+}
+
+type DashboardActivationRequest struct {
+	SystemID string `json:"system_id"`
+}
+
+type DashboardHierarchyStatus struct {
+	ActiveSystemID   string `json:"active_system_id"`
+	ActiveSystemName string `json:"active_system_name,omitempty"`
+	Connected        bool   `json:"connected"`
+	Transport        string `json:"transport"`
+	HTTPAddr         string `json:"http_addr,omitempty"`
+	TotalSystems     int    `json:"total_systems"`
+	TotalServices    int    `json:"total_services"`
+	TotalEntities    int    `json:"total_entities"`
+	TotalOperations  int    `json:"total_operations"`
+}
+
+type DashboardMutationResult struct {
+	OK      bool                     `json:"ok"`
+	Message string                   `json:"message,omitempty"`
+	Error   string                   `json:"error,omitempty"`
+	Status  DashboardHierarchyStatus `json:"status"`
+}
+
+type DashboardServiceDiscovery struct {
+	SystemID        string                `json:"system_id"`
+	ServiceID       string                `json:"service_id"`
+	ServiceName     string                `json:"service_name"`
+	ServiceURL      string                `json:"service_url"`
+	SafeServiceURL  string                `json:"safe_service_url"`
+	Version         string                `json:"version"`
+	SchemaNamespace string                `json:"schema_namespace"`
+	ContainerName   string                `json:"container_name"`
+	EntitySets      []EntitySetSummary    `json:"entity_sets"`
+	FunctionImports []FunctionImportBrief `json:"function_imports"`
+}
+
 type DashboardStatus struct {
 	Status          string          `json:"status"`
 	ServerName      string          `json:"server_name"`
@@ -58,79 +181,6 @@ type FunctionImportBrief struct {
 	IsAction       bool   `json:"is_action"`
 }
 
-type DashboardSettingItem struct {
-	Key         string `json:"key"`
-	Value       string `json:"value"`
-	Description string `json:"description,omitempty"`
-}
-
-type DashboardEndpoint struct {
-	Name        string `json:"name"`
-	Method      string `json:"method"`
-	Path        string `json:"path"`
-	Description string `json:"description"`
-}
-
-type DashboardSettings struct {
-	DashboardPath            string                 `json:"dashboard_path"`
-	DocumentationPath        string                 `json:"documentation_path"`
-	DiagnosticsPath          string                 `json:"diagnostics_path"`
-	Transport                string                 `json:"transport"`
-	HTTPAddr                 string                 `json:"http_addr,omitempty"`
-	ConfigItems              []DashboardSettingItem `json:"config_items"`
-	Endpoints                []DashboardEndpoint    `json:"endpoints"`
-	Notes                    []string               `json:"notes"`
-	SupportsLiveConnectivity bool                   `json:"supports_live_connectivity"`
-}
-
-type DashboardDiagnostics struct {
-	GeneratedAt time.Time          `json:"generated_at"`
-	Status      *DashboardStatus   `json:"status"`
-	Settings    *DashboardSettings `json:"settings"`
-	Metadata    *MetadataOverview  `json:"metadata"`
-}
-
-type DashboardConnection struct {
-	Name           string `json:"name"`
-	SystemName     string `json:"system_name"`
-	ServiceURL     string `json:"service_url"`
-	SafeServiceURL string `json:"safe_service_url"`
-	Client         string `json:"client,omitempty"`
-	Username       string `json:"username"`
-	AccessMode     string `json:"access_mode"`
-	Connected      bool   `json:"connected"`
-}
-
-type DashboardConnectionUpsertRequest struct {
-	Name       string `json:"name"`
-	SystemName string `json:"system_name"`
-	ServiceURL string `json:"service_url"`
-	Client     string `json:"client"`
-	Username   string `json:"username"`
-	Password   string `json:"password"`
-	AccessMode string `json:"access_mode"`
-}
-
-type DashboardConnectionEditRequest struct {
-	OldName string `json:"old_name"`
-	DashboardConnectionUpsertRequest
-}
-
-type DashboardConnectionStatus struct {
-	ActiveDefault    string `json:"active_default"`
-	Connected        bool   `json:"connected"`
-	Transport        string `json:"transport"`
-	HTTPAddr         string `json:"http_addr,omitempty"`
-	TotalConnections int    `json:"total_connections"`
-}
-
-type DashboardMutationResult struct {
-	OK      bool                      `json:"ok"`
-	Message string                    `json:"message,omitempty"`
-	Error   string                    `json:"error,omitempty"`
-	Status  DashboardConnectionStatus `json:"status"`
-}
-
 type DashboardDocumentationContext struct {
 	Transport            string
 	HTTPAddr             string
@@ -139,13 +189,21 @@ type DashboardDocumentationContext struct {
 	DashboardPath        string
 	DocumentationPath    string
 	StatusPath           string
-	ListPath             string
-	ConnectPath          string
-	DisconnectPath       string
-	EditPath             string
-	SwitchPath           string
+	SystemsPath          string
+	SaveSystemPath       string
+	DeleteSystemPath     string
+	ActivateSystemPath   string
+	SaveServicePath      string
+	DeleteServicePath    string
+	SaveEntityPath       string
+	DeleteEntityPath     string
+	SaveOperationPath    string
+	DeleteOperationPath  string
+	DiscoveryPath        string
 	StateFile            string
 	SupportsEmptyStartup bool
-	ActiveConnection     string
-	TotalConnections     int
+	ActiveSystem         string
+	TotalSystems         int
+	TotalEntities        int
+	TotalOperations      int
 }

@@ -10,7 +10,7 @@ echo "2. Update your Claude Desktop config to use the trace-enabled version:"
 echo "   Edit ~/.config/claude/claude_desktop_config.json"
 echo "   Change the command to include --trace-mcp flag:"
 echo
-echo '   "command": "/path/to/odata-mcp --trace-mcp"'
+echo '   "command": "/path/to/sap-odata-mcp-universal --trace-mcp"'
 echo
 echo "3. Start Claude Desktop"
 echo
@@ -43,7 +43,7 @@ cat > test_claude_startup.sh << 'EOF'
     echo '{"jsonrpc":"2.0","id":"3","method":"prompts/list","params":{}}'
     sleep 0.1
     echo '{"jsonrpc":"2.0","id":"4","method":"tools/list","params":{}}'
-) | ./odata-mcp --trace-mcp 2>&1
+) | ./sap-odata-mcp-universal --trace-mcp 2>&1
 EOF
 
 chmod +x test_claude_startup.sh

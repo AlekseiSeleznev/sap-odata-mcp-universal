@@ -22,7 +22,7 @@ echo
     sleep 0.5
     echo '{"jsonrpc":"2.0","id":4,"method":"prompts/list","params":{}}'
     sleep 0.5
-) | ./odata-mcp --trace-mcp 2>&1 | grep -E "(TRACE|ERROR)" &
+) | ./sap-odata-mcp-universal --trace-mcp 2>&1 | grep -E "(TRACE|ERROR)" &
 
 # Wait for background process
 PID=$!

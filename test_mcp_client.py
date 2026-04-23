@@ -10,7 +10,7 @@ def send_request(request):
     """Send a request to the MCP server and return the response"""
     try:
         proc = subprocess.Popen(
-            ['./odata-mcp'],
+            ['./sap-odata-mcp-universal'],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

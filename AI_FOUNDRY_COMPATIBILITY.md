@@ -9,7 +9,7 @@ The OData MCP Bridge now supports compatibility with AI Foundry's MCP client, wh
 To run the OData MCP Bridge with AI Foundry compatibility:
 
 ```bash
-./odata-mcp --service <your-odata-service-url> --protocol-version "2025-06-18"
+./sap-odata-mcp-universal --service <your-odata-service-url> --protocol-version "2025-06-18"
 ```
 
 ## Problem Background
@@ -28,10 +28,10 @@ A new command-line parameter `--protocol-version` allows you to override the MCP
 
 ```bash
 # For AI Foundry compatibility
-./odata-mcp --service https://your-service.com/odata --protocol-version "2025-06-18"
+./sap-odata-mcp-universal --service https://your-service.com/odata --protocol-version "2025-06-18"
 
 # Default (Claude, etc.)
-./odata-mcp --service https://your-service.com/odata
+./sap-odata-mcp-universal --service https://your-service.com/odata
 ```
 
 ### 2. Response Field Ordering
@@ -48,7 +48,7 @@ This ensures compatibility with clients that may be sensitive to field ordering.
 ### Basic AI Foundry Setup
 
 ```bash
-./odata-mcp \
+./sap-odata-mcp-universal \
   --service "https://api.example.com/odata" \
   --protocol-version "2025-06-18" \
   --user "your-username" \
@@ -58,7 +58,7 @@ This ensures compatibility with clients that may be sensitive to field ordering.
 ### With Additional Options
 
 ```bash
-./odata-mcp \
+./sap-odata-mcp-universal \
   --service "https://api.example.com/odata" \
   --protocol-version "2025-06-18" \
   --user "your-username" \
@@ -74,7 +74,7 @@ You can also set the protocol version via environment variable:
 
 ```bash
 export ODATA_PROTOCOL_VERSION="2025-06-18"
-./odata-mcp --service "https://api.example.com/odata"
+./sap-odata-mcp-universal --service "https://api.example.com/odata"
 ```
 
 ## Testing Protocol Compatibility
@@ -84,7 +84,7 @@ To verify the protocol version is correctly set:
 ```bash
 # Send a test initialization request
 echo '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"openai-mcp","version":"1.0.0"}},"id":0}' | \
-  ./odata-mcp --service "https://services.odata.org/V2/Northwind/Northwind.svc/" --protocol-version "2025-06-18"
+  ./sap-odata-mcp-universal --service "https://services.odata.org/V2/Northwind/Northwind.svc/" --protocol-version "2025-06-18"
 ```
 
 Expected response structure:
@@ -107,7 +107,7 @@ Expected response structure:
     },
     "protocolVersion": "2025-06-18",
     "serverInfo": {
-      "name": "odata-mcp-bridge",
+      "name": "sap-odata-mcp-universal",
       "version": "1.0.0"
     }
   }
@@ -148,4 +148,4 @@ For AI Foundry specific connection issues:
 For issues specific to AI Foundry integration:
 1. Check this guide first
 2. Enable verbose logging with `--verbose`
-3. Report issues at: https://github.com/oisee/odata_mcp_go/issues
+3. Report issues at: https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/issues

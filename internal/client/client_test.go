@@ -1,11 +1,12 @@
 package client
 
 import (
+	"context"
 	"net/url"
 	"strings"
 	"testing"
 
-	"github.com/zmcp/odata-mcp/internal/models"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
 )
 
 func TestEncodeQueryParams(t *testing.T) {
@@ -153,5 +154,19 @@ func TestBuildKeyPredicateComposite(t *testing.T) {
 	}
 	if !strings.Contains(result, ",") {
 		t.Errorf("buildKeyPredicate should have comma separator, got: %v", result)
+	}
+}
+
+func TestBuildRequestPreservesBaseQuery(t *testing.T) {
+	c := NewODataClient("http://example.test/sap/opu/odata/sap/SERVICE_SRV/?sap-client=100", false)
+
+	req, err := c.buildRequest(context.Background(), "GET", "$metadata", nil)
+	if err != nil {
+		t.Fatalf("buildRequest returned error: %v", err)
+	}
+
+	expected := "http://example.test/sap/opu/odata/sap/SERVICE_SRV/$metadata?sap-client=100"
+	if req.URL.String() != expected {
+		t.Fatalf("buildRequest produced %q, want %q", req.URL.String(), expected)
 	}
 }

@@ -16,12 +16,12 @@ This release adds **AI Foundry compatibility** through configurable MCP protocol
 
 #### For AI Foundry Integration
 ```bash
-./odata-mcp --service "https://your-service.com/odata" --protocol-version "2025-06-18"
+./sap-odata-mcp-universal --service "https://your-service.com/odata" --protocol-version "2025-06-18"
 ```
 
 #### Default (Claude, etc.)
 ```bash
-./odata-mcp --service "https://your-service.com/odata"
+./sap-odata-mcp-universal --service "https://your-service.com/odata"
 # Uses default protocol version 2024-11-05
 ```
 
@@ -49,15 +49,15 @@ Pre-built binaries are available for:
 ### macOS/Linux
 ```bash
 # Download the appropriate binary for your platform
-tar -xzf odata-mcp-v1.5.1-<platform>-<arch>.tar.gz
-chmod +x odata-mcp-v1.5.1-<platform>-<arch>
-mv odata-mcp-v1.5.1-<platform>-<arch> /usr/local/bin/odata-mcp
+tar -xzf sap-odata-mcp-universal-v1.5.1-<platform>-<arch>.tar.gz
+chmod +x sap-odata-mcp-universal-v1.5.1-<platform>-<arch>
+mv sap-odata-mcp-universal-v1.5.1-<platform>-<arch> /usr/local/bin/sap-odata-mcp-universal
 ```
 
 ### Windows
 ```powershell
 # Extract the ZIP file and add to PATH
-# Or run directly: .\odata-mcp-v1.5.1-windows-amd64.exe
+# Or run directly: .\sap-odata-mcp-universal-v1.5.1-windows-amd64.exe
 ```
 
 ## 🙏 Acknowledgments

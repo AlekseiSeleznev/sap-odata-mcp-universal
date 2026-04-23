@@ -17,8 +17,8 @@ The OData MCP Bridge is a Go implementation that creates a bridge between OData 
 ### 2.1 Component Structure
 
 ```
-odata_mcp_go/
-├── cmd/odata-mcp/          # Main entry point and CLI
+sap-odata-mcp-universal/
+├── cmd/sap-odata-mcp-universal/          # Main entry point and CLI
 ├── internal/
 │   ├── bridge/             # Core bridge logic connecting OData to MCP
 │   ├── client/             # OData HTTP client implementation
@@ -39,7 +39,7 @@ odata_mcp_go/
 
 ### 2.2 Key Components
 
-1. **Main Entry Point** (`cmd/odata-mcp/main.go`):
+1. **Main Entry Point** (`cmd/sap-odata-mcp-universal/main.go`):
    - CLI interface using Cobra framework
    - Configuration parsing from flags, environment variables, and .env files
    - Transport selection (stdio/HTTP)

@@ -4,13 +4,13 @@
 
 ```bash
 # Download latest release
-wget https://github.com/your-repo/releases/latest/download/odata-mcp-linux
-chmod +x odata-mcp-linux
-sudo mv odata-mcp-linux /usr/local/bin/odata-mcp
+wget https://github.com/your-repo/releases/latest/download/sap-odata-mcp-universal-linux
+chmod +x sap-odata-mcp-universal-linux
+sudo mv sap-odata-mcp-universal-linux /usr/local/bin/sap-odata-mcp-universal
 
 # Or build from source
 git clone <repository>
-cd odata_mcp_go
+cd sap-odata-mcp-universal
 make build
 ```
 
@@ -18,16 +18,16 @@ make build
 
 ```bash
 # Anonymous access
-./odata-mcp https://services.odata.org/V2/Northwind/Northwind.svc/
+./sap-odata-mcp-universal https://services.odata.org/V2/Northwind/Northwind.svc/
 
 # With authentication
-./odata-mcp --user admin --password secret https://my-service.com/odata/
+./sap-odata-mcp-universal --user admin --password secret https://my-service.com/odata/
 
 # Using environment variables
 export ODATA_URL=https://my-service.com/odata/
 export ODATA_USERNAME=admin
 export ODATA_PASSWORD=secret
-./odata-mcp
+./sap-odata-mcp-universal
 ```
 
 ## Common Flags
@@ -92,7 +92,7 @@ Location by platform:
 {
     "mcpServers": {
         "my-odata": {
-            "command": "/path/to/odata-mcp",
+            "command": "/path/to/sap-odata-mcp-universal",
             "args": ["--service", "https://my-service.com/odata/"]
         }
     }
@@ -105,7 +105,7 @@ Location by platform:
 {
     "mcpServers": {
         "production-api": {
-            "command": "/usr/local/bin/odata-mcp",
+            "command": "/usr/local/bin/sap-odata-mcp-universal",
             "args": [
                 "--service", "https://api.company.com/odata/",
                 "--read-only",
@@ -127,7 +127,7 @@ Location by platform:
 
 ### Enable Trace Logging
 ```bash
-./odata-mcp --trace-mcp https://my-service.com/odata/
+./sap-odata-mcp-universal --trace-mcp https://my-service.com/odata/
 # Check logs in:
 # Linux/WSL: /tmp/mcp_trace_*.log
 # Windows: %TEMP%\mcp_trace_*.log

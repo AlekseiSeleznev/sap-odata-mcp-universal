@@ -120,8 +120,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-platform builds for Linux, Windows, and macOS
 
 ### Notes
-- This is a Go port of the Python OData-MCP bridge
+- This repository is published as `sap-odata-mcp-universal`
 - Maintains CLI compatibility with the original implementation
 
-[Unreleased]: https://github.com/odata-mcp/go/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/odata-mcp/go/releases/tag/v0.1.0
+[Unreleased]: https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/releases/tag/v0.1.0

@@ -15,7 +15,7 @@
     },
     "protocolVersion": "2024-11-05",
     "serverInfo": {
-      "name": "odata-mcp-bridge",
+      "name": "sap-odata-mcp-universal",
       "version": "1.0.0"
     }
   }
@@ -43,7 +43,7 @@
       }
     },
     "serverInfo": {
-      "name": "odata-mcp",
+      "name": "sap-odata-mcp-universal",
       "version": "1.9.2"
     }
   }
@@ -152,7 +152,7 @@ Reordered response fields to match Python implementation:
       }
     },
     "serverInfo": {
-      "name": "odata-mcp-bridge",
+      "name": "sap-odata-mcp-universal",
       "version": "1.0.0"
     }
   }

@@ -87,8 +87,8 @@ jobs:
     - name: Test binary
       run: |
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          ./odata-mcp.exe --version
+          ./sap-odata-mcp-universal.exe --version
         else
-          ./odata-mcp --version
+          ./sap-odata-mcp-universal --version
         fi
       shell: bash

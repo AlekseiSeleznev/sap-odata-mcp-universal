@@ -22,7 +22,7 @@ if ./test_regression_binary_exists.sh; then
 else
     echo -e "${RED}Binary regression check failed!${NC}"
     echo -e "${YELLOW}This is the same issue that caused the ENOENT error.${NC}"
-    echo -e "${YELLOW}Build the binary first: go build -o odata-mcp ./cmd/odata-mcp${NC}"
+    echo -e "${YELLOW}Build the binary first: go build -o sap-odata-mcp-universal ./cmd/sap-odata-mcp-universal${NC}"
     exit 1
 fi
 echo

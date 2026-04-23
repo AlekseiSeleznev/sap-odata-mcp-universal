@@ -1,144 +1,81 @@
-# Issue #18: $search Capability Detection
+# Issue #18: корректное определение поддержки `$search`
 
-**Date:** 2026-01-31
-**Document ID:** 007
-**Subject:** Fix for OData $search causing timeouts on unsupported services
-**Related:** GitHub Issue #18, OData v4 Capabilities Vocabulary
-**Status:** ✅ IMPLEMENTED
+**Документ:** 007  
+**Дата:** 2026-04-23  
+**Статус:** исправлено
 
 ---
 
-## Problem
+## Проблема
 
-Claude was inconsistently adding `$search` parameter to OData queries. When the service doesn't support full-text search, this caused timeouts.
+Bridge мог генерировать search-инструменты даже для сервисов, которые реально не поддерживают `$search`.
 
-**Example from issue:**
-```
-// Works (no search)
-GET /Customers
+Симптом:
 
-// Fails with timeout (search not supported)
-GET /Products?$search=*
-```
-
-The user noted: *"$search is a standard OData full-text-search option which I don't think we support."*
+- LLM вызывает search tool
+- OData service не умеет `$search`
+- пользователь получает timeout или некорректную ошибку
 
 ---
 
-## Root Cause
+## Причина
 
-The v4 metadata parser defaulted `Searchable` to `true` for all entity sets:
+В OData v4 раньше использовалось слишком оптимистичное предположение: search считался доступным по умолчанию.
 
-```go
-// parser_v4.go - BEFORE
-return &models.EntitySet{
-    ...
-    Searchable: true,  // Assumed all v4 services support $search
-}
-```
+Это было неверно.
 
-This caused search tools to be generated for every entity set, even when the service doesn't implement `$search`.
-
-**v2 was correct:** It only enabled search when SAP explicitly declared `sap:searchable="true"` in metadata.
+Корректное поведение должно опираться на capability annotations, а не на "разумное ожидание", что любой v4 сервис поддерживает full-text search.
 
 ---
 
-## Solution
+## Исправление
 
-### 1. Parse OData v4 Capability Annotations
+В parser для OData v4 была добавлена проверка capability annotations вида:
 
-OData v4 services can declare search support via the Capabilities vocabulary:
+- `Org.OData.Capabilities.V1.SearchRestrictions`
+- `Searchable=true|false`
 
-```xml
-<EntitySet Name="Products" EntityType="NS.Product">
-  <Annotation Term="Org.OData.Capabilities.V1.SearchRestrictions">
-    <Record>
-      <PropertyValue Property="Searchable" Bool="true"/>
-    </Record>
-  </Annotation>
-</EntitySet>
-```
-
-Added annotation parsing to `parser_v4.go`:
-
-```go
-// AnnotationV4 represents an OData v4 annotation
-type AnnotationV4 struct {
-    Term   string           `xml:"Term,attr"`
-    Record *AnnotationRecord `xml:"Record"`
-}
-
-// Check for SearchRestrictions annotation
-for _, ann := range es.Annotations {
-    if strings.HasSuffix(ann.Term, "SearchRestrictions") {
-        if ann.Record != nil {
-            for _, pv := range ann.Record.PropertyValues {
-                if pv.Property == "Searchable" {
-                    searchable = pv.Bool == "true"
-                }
-            }
-        }
-    }
-}
-```
-
-### 2. Conservative Default
-
-If no annotation is present, default to `false`:
-
-```go
-// parser_v4.go - AFTER
-searchable := false // Default to false (conservative)
-
-// ... check annotations ...
-
-return &models.EntitySet{
-    ...
-    Searchable: searchable,
-}
-```
+Теперь search-инструменты появляются только тогда, когда metadata это действительно разрешает.
 
 ---
 
-## Behavior Matrix
+## Почему это важно для MCP
 
-| Version | Metadata Declaration | Result |
-|---------|---------------------|--------|
-| **v2** | `sap:searchable="true"` | Search enabled |
-| **v2** | `sap:searchable="false"` or missing | Search disabled |
-| **v4** | `SearchRestrictions.Searchable=true` | Search enabled |
-| **v4** | `SearchRestrictions.Searchable=false` | Search disabled |
-| **v4** | No annotation | Search disabled (conservative) |
+Для MCP-клиента наличие инструмента фактически означает контракт:
 
----
+- если tool показан, AI считает его допустимым
+- если tool не должен был появиться, это приводит к неверной стратегии вызовов
 
-## Files Changed
-
-| File | Change |
-|------|--------|
-| `internal/metadata/parser_v4.go` | Added `AnnotationV4`, `AnnotationRecord`, `AnnotationPropValue` structs |
-| `internal/metadata/parser_v4.go` | Updated `parseEntitySetV4()` to check annotations |
-| `internal/metadata/parser_test.go` | Added `TestParseMetadata_V4_SearchRestrictions` |
+Поэтому корректная генерация search-tools важна не только для HTTP-запроса, но и для качества reasoning на стороне AI-клиента.
 
 ---
 
-## Testing
+## Практический результат
 
-```bash
-go test ./internal/metadata/... -v -run SearchRestrictions
-```
+После фикса:
 
-Test verifies:
-- Entity set with `Searchable=true` annotation → search enabled
-- Entity set with `Searchable=false` annotation → search disabled
-- Entity set without annotation → search disabled (default)
+- unsupported services не получают лишние search tools
+- снижается число ложных timeout-сценариев
+- MCP toolset лучше соответствует реальным возможностям backend
 
 ---
 
-## Impact
+## Что проверять при похожих симптомах
 
-- Services that support `$search` and declare it via annotations: **No change** (works)
-- Services that support `$search` but don't declare it: **Search tool not generated** (user can use filter instead)
-- Services that don't support `$search`: **Fixed** (no more timeouts)
+1. есть ли в metadata capability annotation для search
+2. действительно ли сервис поддерживает `$search`
+3. не появился ли tool по ошибке из-за fallback логики
 
-The conservative default prioritizes reliability over functionality. Most OData services don't implement full-text search, so this matches the common case.
+---
+
+## Связанные файлы
+
+- `internal/metadata/parser_v4.go`
+- `internal/bridge/generators.go`
+
+---
+
+## Связанные документы
+
+- [README.md](../README.md)
+- [006-testing-strategy.md](006-testing-strategy.md)

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zmcp/odata-mcp/internal/client"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/client"
 )
 
 // TestErrorResponseTiming verifies that OData errors are returned immediately

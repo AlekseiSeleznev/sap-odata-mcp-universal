@@ -1,4 +1,4 @@
-module github.com/zmcp/odata-mcp
+module github.com/AlekseiSeleznev/sap-odata-mcp-universal
 
 go 1.21
 

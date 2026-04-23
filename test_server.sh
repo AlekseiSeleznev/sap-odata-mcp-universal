@@ -10,7 +10,7 @@ EOF
 
 # Start server and send initialize request
 echo "Sending initialize request..."
-cat test_init.json | ./odata-mcp 2>&1 | jq '.' || echo "Failed to parse JSON response"
+cat test_init.json | ./sap-odata-mcp-universal 2>&1 | jq '.' || echo "Failed to parse JSON response"
 
 # Clean up
 rm -f test_init.json

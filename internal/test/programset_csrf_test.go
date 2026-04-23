@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/client"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/zmcp/odata-mcp/internal/client"
-	"github.com/zmcp/odata-mcp/internal/constants"
 )
 
 // TestPROGRAMSetCreation tests creating ABAP programs through OData with CSRF token handling

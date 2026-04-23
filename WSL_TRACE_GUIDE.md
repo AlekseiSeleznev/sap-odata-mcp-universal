@@ -5,7 +5,7 @@
 Since you're running in WSL, the trace logs are saved in the Linux temp directory, but you can also access Windows directories.
 
 ### 1. Linux Temp Directory (WSL)
-If you're running odata-mcp from WSL:
+If you're running sap-odata-mcp-universal from WSL:
 ```bash
 ls -la /tmp/mcp_trace_*.log
 ```
@@ -73,13 +73,13 @@ find /mnt/c/Users -path "*/AppData/Local/Temp/mcp_trace_*.log" 2>/dev/null
 
 #### Get trace file location after running:
 ```bash
-./odata-mcp --trace-mcp 2>&1 | grep "TRACE.*Output file"
+./sap-odata-mcp-universal --trace-mcp 2>&1 | grep "TRACE.*Output file"
 ```
 
 ### 7. Example: Running with Trace and Finding Log
 ```bash
 # Run with trace
-echo '{"jsonrpc":"2.0","id":1,"method":"ping"}' | ./odata-mcp --trace-mcp
+echo '{"jsonrpc":"2.0","id":1,"method":"ping"}' | ./sap-odata-mcp-universal --trace-mcp
 
 # Find the trace file
 TRACE_FILE=$(ls -t /tmp/mcp_trace_*.log | head -1)

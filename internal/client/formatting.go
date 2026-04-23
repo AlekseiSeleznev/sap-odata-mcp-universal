@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/zmcp/odata-mcp/internal/models"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
 )
 
 // encodeQueryParams encodes URL query parameters with proper space encoding

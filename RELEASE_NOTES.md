@@ -20,7 +20,7 @@ This release brings significant improvements for SAP OData service compatibility
 - Single `/mcp` endpoint with automatic SSE upgrade
 - Bidirectional communication and session management
 - Better alignment with Python MCP ecosystem
-- Usage: `./odata-mcp --transport streamable-http <service-url>`
+- Usage: `./sap-odata-mcp-universal --transport streamable-http <service-url>`
 
 ## 🐛 Bug Fixes
 - Fixed GUID filtering issues for SAP OData services
@@ -44,15 +44,15 @@ Pre-built binaries are available for:
 ### macOS/Linux
 ```bash
 # Download the appropriate binary for your platform
-tar -xzf odata-mcp-v1.5.0-<platform>-<arch>.tar.gz
-chmod +x odata-mcp-v1.5.0-<platform>-<arch>
-mv odata-mcp-v1.5.0-<platform>-<arch> /usr/local/bin/odata-mcp
+tar -xzf sap-odata-mcp-universal-v1.5.0-<platform>-<arch>.tar.gz
+chmod +x sap-odata-mcp-universal-v1.5.0-<platform>-<arch>
+mv sap-odata-mcp-universal-v1.5.0-<platform>-<arch> /usr/local/bin/sap-odata-mcp-universal
 ```
 
 ### Windows
 ```powershell
 # Extract the ZIP file and add to PATH
-# Or run directly: .\odata-mcp-v1.5.0-windows-amd64.exe
+# Or run directly: .\sap-odata-mcp-universal-v1.5.0-windows-amd64.exe
 ```
 
 ## 🙏 Acknowledgments

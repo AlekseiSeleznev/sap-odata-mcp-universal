@@ -27,7 +27,7 @@ echo
     echo '{"jsonrpc":"2.0","id":"call-tool-004","method":"tools/call","params":{"name":"odata_service_info_for_Z001","arguments":{}}}'
     sleep 0.1
     
-) | ./odata-mcp --trace-mcp 2>&1
+) | ./sap-odata-mcp-universal --trace-mcp 2>&1
 
 echo
 echo "Checking latest trace file..."

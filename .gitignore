@@ -1,12 +1,12 @@
-odata-mcp
-odata-mcp.exe
+sap-odata-mcp-universal
+sap-odata-mcp-universal.exe
 # IDE and system files
 .DS_Store
 .vscode/
 .idea/
 
 # IMPORTANT: Files with credentials/secrets
-.zmcp.json
+.sap-odata-mcp-universal.json
 zmcp.json
 .mcp.json
 *zmcp*.json

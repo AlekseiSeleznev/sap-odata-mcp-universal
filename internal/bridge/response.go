@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/zmcp/odata-mcp/internal/constants"
-	"github.com/zmcp/odata-mcp/internal/models"
-	"github.com/zmcp/odata-mcp/internal/utils"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/constants"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/utils"
 )
 
 // enhanceResponse enhances OData response based on configuration options

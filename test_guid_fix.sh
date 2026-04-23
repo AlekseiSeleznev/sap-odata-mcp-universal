@@ -4,7 +4,7 @@
 echo "Testing GUID filter transformation for SAP services..."
 
 # Create a simple test with verbose output to see the transformation
-./build/odata-mcp --service "https://services.odata.org/V2/Northwind/Northwind.svc/" --verbose --trace <<EOF
+./build/sap-odata-mcp-universal --service "https://services.odata.org/V2/Northwind/Northwind.svc/" --verbose --trace <<EOF
 {
   "jsonrpc": "2.0",
   "method": "initialize",

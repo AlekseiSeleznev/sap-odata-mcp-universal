@@ -8,8 +8,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/zmcp/odata-mcp/internal/debug"
-	"github.com/zmcp/odata-mcp/internal/transport"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/debug"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/transport"
 )
 
 // StdioTransport implements the Transport interface for stdio communication

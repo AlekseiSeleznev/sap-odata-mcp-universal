@@ -7,10 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/client"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/zmcp/odata-mcp/internal/client"
-	"github.com/zmcp/odata-mcp/internal/constants"
 )
 
 // TestCSRFTokenRetryMechanism tests the automatic retry on 403 in doRequest

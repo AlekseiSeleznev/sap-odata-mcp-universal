@@ -150,7 +150,7 @@ const (
 
 // Default values
 const (
-	DefaultUserAgent         = "OData-MCP-Bridge/1.0 (Go)"
+	DefaultUserAgent         = "sap-odata-mcp-universal/1.0 (Go)"
 	DefaultTimeout           = 30               // seconds
 	DefaultMaxResponseSize   = 10 * 1024 * 1024 // 10MB
 	DefaultMaxItems          = 1000
@@ -160,7 +160,7 @@ const (
 // MCP-specific constants
 const (
 	MCPProtocolVersion = "2024-11-05"
-	MCPServerName      = "odata-mcp-bridge"
+	MCPServerName      = "sap-odata-mcp-universal"
 	MCPServerVersion   = "1.0.0"
 )
 

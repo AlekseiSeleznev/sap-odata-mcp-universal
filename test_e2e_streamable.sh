@@ -37,7 +37,7 @@ run_test() {
 
 # Build the binary first
 echo "Building OData MCP binary..."
-if go build -o odata-mcp ./cmd/odata-mcp; then
+if go build -o sap-odata-mcp-universal ./cmd/sap-odata-mcp-universal; then
     echo -e "${GREEN}Build successful${NC}"
 else
     echo -e "${RED}Build failed!${NC}"
@@ -47,7 +47,7 @@ echo
 
 # Test 1: Start server with streamable-http transport
 echo "=== Test Suite 1: Basic Streamable HTTP ==="
-./odata-mcp --transport streamable-http --verbose --service https://services.odata.org/V2/Northwind/Northwind.svc/ > server1.log 2>&1 &
+./sap-odata-mcp-universal --transport streamable-http --verbose --service https://services.odata.org/V2/Northwind/Northwind.svc/ > server1.log 2>&1 &
 SERVER_PID=$!
 sleep 3
 
@@ -86,7 +86,7 @@ echo
 
 # Test 2: Test with different port
 echo "=== Test Suite 2: Custom Port Configuration ==="
-./odata-mcp --transport streamable-http --http-addr localhost:9090 --service https://services.odata.org/V2/Northwind/Northwind.svc/ > server2.log 2>&1 &
+./sap-odata-mcp-universal --transport streamable-http --http-addr localhost:9090 --service https://services.odata.org/V2/Northwind/Northwind.svc/ > server2.log 2>&1 &
 SERVER_PID=$!
 sleep 3
 
@@ -94,7 +94,7 @@ run_test "Custom port health" "curl -s http://localhost:9090/health | grep -q 'o
 run_test "Custom port MCP" "curl -s -X POST http://localhost:9090/mcp \
   -H 'Content-Type: application/json' \
   -d '{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"initialize\",\"params\":{}}' \
-  | grep -q 'odata-mcp-bridge'"
+  | grep -q 'sap-odata-mcp-universal'"
 
 kill $SERVER_PID 2>/dev/null || true
 wait $SERVER_PID 2>/dev/null || true
@@ -102,7 +102,7 @@ echo
 
 # Test 3: Compare with legacy SSE transport
 echo "=== Test Suite 3: Legacy SSE Transport Comparison ==="
-./odata-mcp --transport http --service https://services.odata.org/V2/Northwind/Northwind.svc/ > server3.log 2>&1 &
+./sap-odata-mcp-universal --transport http --service https://services.odata.org/V2/Northwind/Northwind.svc/ > server3.log 2>&1 &
 SERVER_PID=$!
 sleep 3
 
@@ -119,7 +119,7 @@ echo
 
 # Test 4: Test with OData V4 service
 echo "=== Test Suite 4: OData V4 Service ==="
-./odata-mcp --transport streamable-http --service https://services.odata.org/V4/Northwind/Northwind.svc/ > server4.log 2>&1 &
+./sap-odata-mcp-universal --transport streamable-http --service https://services.odata.org/V4/Northwind/Northwind.svc/ > server4.log 2>&1 &
 SERVER_PID=$!
 sleep 3
 
@@ -139,7 +139,7 @@ echo
 
 # Test 5: Test actual tool invocation
 echo "=== Test Suite 5: Tool Invocation ==="
-./odata-mcp --transport streamable-http --service https://services.odata.org/V2/Northwind/Northwind.svc/ > server5.log 2>&1 &
+./sap-odata-mcp-universal --transport streamable-http --service https://services.odata.org/V2/Northwind/Northwind.svc/ > server5.log 2>&1 &
 SERVER_PID=$!
 sleep 3
 
@@ -169,7 +169,7 @@ echo "=== Test Suite 6: Security Features ==="
 
 # Test non-localhost rejection
 set +e  # Allow this to fail
-./odata-mcp --transport streamable-http --http-addr 0.0.0.0:8080 --service https://services.odata.org/V2/Northwind/Northwind.svc/ > server6.log 2>&1 &
+./sap-odata-mcp-universal --transport streamable-http --http-addr 0.0.0.0:8080 --service https://services.odata.org/V2/Northwind/Northwind.svc/ > server6.log 2>&1 &
 SERVER_PID=$!
 sleep 1
 

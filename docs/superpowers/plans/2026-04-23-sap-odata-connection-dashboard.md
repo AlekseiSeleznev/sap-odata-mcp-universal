@@ -74,7 +74,7 @@ Expected: PASS with coverage for save/load/list/add/remove/switch flows.
 
 **Files:**
 - Modify: `internal/bridge/bridge.go`
-- Modify: `cmd/odata-mcp/main.go`
+- Modify: `cmd/sap-odata-mcp-universal/main.go`
 - Modify: `internal/mcp/server.go` (only if needed)
 - Test: `internal/dashboard/server_test.go`
 

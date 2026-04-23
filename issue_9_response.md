@@ -28,7 +28,7 @@ To resolve your issue, please **upgrade to v1.4.0**:
 
 ```bash
 # For Windows
-curl -L https://github.com/oisee/odata_mcp_go/releases/download/v1.4.0/odata-mcp.exe -o odata-mcp.exe
+curl -L https://github.com/AlekseiSeleznev/sap-odata-mcp-universal/releases/download/v1.4.0/sap-odata-mcp-universal.exe -o sap-odata-mcp-universal.exe
 
 # For other platforms, check the releases page
 ```

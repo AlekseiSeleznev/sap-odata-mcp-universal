@@ -15,7 +15,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-BINARY_PATH="./odata-mcp"
+BINARY_PATH="./sap-odata-mcp-universal"
 TESTS_PASSED=0
 TESTS_FAILED=0
 
@@ -26,7 +26,7 @@ if [ -f "$BINARY_PATH" ]; then
     ((TESTS_PASSED++))
 else
     echo -e "${RED}✗ FAILED${NC} - Binary not found at $BINARY_PATH"
-    echo -e "${YELLOW}Run 'go build -o odata-mcp ./cmd/odata-mcp' to build${NC}"
+    echo -e "${YELLOW}Run 'go build -o sap-odata-mcp-universal ./cmd/sap-odata-mcp-universal' to build${NC}"
     ((TESTS_FAILED++))
     exit 1
 fi
@@ -76,9 +76,9 @@ echo -n "5. Checking Claude Desktop integration... "
 CLAUDE_CONFIG_PATH="/Users/alice/Library/Application Support/Claude/claude_desktop_config.json"
 if [ -f "$CLAUDE_CONFIG_PATH" ]; then
     # Check if our binary path is referenced in config
-    if grep -q "odata_mcp_go/odata-mcp" "$CLAUDE_CONFIG_PATH"; then
+    if grep -q "sap-odata-mcp-universal/sap-odata-mcp-universal" "$CLAUDE_CONFIG_PATH"; then
         # Extract the path from config
-        CONFIG_BINARY=$(grep -o '"/Users/[^"]*odata-mcp"' "$CLAUDE_CONFIG_PATH" | tr -d '"' | head -1)
+        CONFIG_BINARY=$(grep -o '"/Users/[^"]*sap-odata-mcp-universal"' "$CLAUDE_CONFIG_PATH" | tr -d '"' | head -1)
         if [ -n "$CONFIG_BINARY" ]; then
             if [ -f "$CONFIG_BINARY" ]; then
                 echo -e "${GREEN}✓ PASSED${NC} - Binary exists at configured path"

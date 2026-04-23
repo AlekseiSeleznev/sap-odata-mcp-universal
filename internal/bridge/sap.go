@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/zmcp/odata-mcp/internal/models"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
 )
 
 // transformFilterForSAP transforms filter strings to handle SAP-specific GUID formatting

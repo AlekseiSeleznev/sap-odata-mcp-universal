@@ -28,7 +28,7 @@ Setting `--max-items 99999` caused the MCP server to fail during startup.
 No validation on the `--max-items` parameter allowed extremely large values that could cause memory allocation issues when processing responses. Large values could lead to excessive memory usage when arrays are pre-allocated or when responses are buffered.
 
 ### Fix Applied
-Added validation in `cmd/odata-mcp/main.go` to limit `--max-items` to a reasonable maximum of 10,000:
+Added validation in `cmd/sap-odata-mcp-universal/main.go` to limit `--max-items` to a reasonable maximum of 10,000:
 ```go
 // Validate max-items parameter
 if cfg.MaxItems > 10000 {
@@ -62,7 +62,7 @@ This appears to be a client-side (Claude) issue rather than an MCP bridge proble
 {
   "mcpServers": {
     "odata-business-partner": {
-      "command": "/path/to/odata-mcp",
+      "command": "/path/to/sap-odata-mcp-universal",
       "args": [
         "--service", "https://example.com/API_BUSINESS_PARTNER",
         "--tool-shrink",

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/zmcp/odata-mcp/internal/utils"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/utils"
 )
 
 func TestIsLikelyDecimalField(t *testing.T) {
