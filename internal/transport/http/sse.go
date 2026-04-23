@@ -14,12 +14,13 @@ import (
 
 // SSETransport implements the Transport interface for Server-Sent Events
 type SSETransport struct {
-	addr     string
-	server   *http.Server
-	handler  transport.Handler
-	clients  map[string]*sseClient
-	mu       sync.RWMutex
-	messages chan *clientMessage
+	addr           string
+	server         *http.Server
+	handler        transport.Handler
+	clients        map[string]*sseClient
+	mu             sync.RWMutex
+	messages       chan *clientMessage
+	routeRegistrar RouteRegistrar
 }
 
 type sseClient struct {
@@ -45,6 +46,11 @@ func NewSSE(addr string, handler transport.Handler) *SSETransport {
 	}
 }
 
+// SetRouteRegistrar configures additional routes on the same HTTP server.
+func (t *SSETransport) SetRouteRegistrar(registrar RouteRegistrar) {
+	t.routeRegistrar = registrar
+}
+
 // Start initializes the HTTP server and begins listening
 func (t *SSETransport) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
@@ -62,6 +68,10 @@ func (t *SSETransport) Start(ctx context.Context) error {
 			log.Printf("health check: failed to encode response: %v", err)
 		}
 	})
+
+	if t.routeRegistrar != nil {
+		t.routeRegistrar(mux)
+	}
 
 	t.server = &http.Server{
 		Addr:    t.addr,

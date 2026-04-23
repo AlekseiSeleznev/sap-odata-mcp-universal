@@ -26,7 +26,11 @@ type StreamableHTTPTransport struct {
 	activeStreams  map[string]*streamContext
 	enableSecurity bool
 	forwardHeaders bool // Whether to forward HTTP headers to OData client
+	routeRegistrar RouteRegistrar
 }
+
+// RouteRegistrar adds extra routes to the HTTP mux used by the transport.
+type RouteRegistrar func(mux *http.ServeMux)
 
 type streamContext struct {
 	id       string
@@ -45,6 +49,11 @@ func NewStreamableHTTP(addr string, handler transport.Handler, enableSecurity bo
 		enableSecurity: enableSecurity,
 		forwardHeaders: forwardHeaders,
 	}
+}
+
+// SetRouteRegistrar configures additional routes on the same HTTP server.
+func (t *StreamableHTTPTransport) SetRouteRegistrar(registrar RouteRegistrar) {
+	t.routeRegistrar = registrar
 }
 
 // Start initializes the HTTP server and begins listening
@@ -69,6 +78,10 @@ func (t *StreamableHTTPTransport) Start(ctx context.Context) error {
 
 	// Legacy SSE endpoint for backward compatibility
 	mux.HandleFunc("/sse", t.handleLegacySSE)
+
+	if t.routeRegistrar != nil {
+		t.routeRegistrar(mux)
+	}
 
 	t.server = &http.Server{
 		Addr:    t.addr,

@@ -54,7 +54,7 @@ type MCPClient struct {
 
 func NewMCPClient(t *testing.T, serviceURL string) (*MCPClient, error) {
 	// Build the server if needed
-	buildCmd := exec.Command("go", "build", "-o", "../../odata-mcp", "../../cmd/odata-mcp")
+	buildCmd := exec.Command("go", "build", "-buildvcs=false", "-o", "../../odata-mcp", "../../cmd/odata-mcp")
 	buildCmd.Dir = "."
 	if output, err := buildCmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("failed to build server: %w\nOutput: %s", err, output)

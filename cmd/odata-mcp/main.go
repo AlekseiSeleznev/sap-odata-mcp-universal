@@ -19,6 +19,7 @@ import (
 
 	"github.com/zmcp/odata-mcp/internal/bridge"
 	"github.com/zmcp/odata-mcp/internal/config"
+	"github.com/zmcp/odata-mcp/internal/dashboard"
 	"github.com/zmcp/odata-mcp/internal/debug"
 	"github.com/zmcp/odata-mcp/internal/transport"
 	"github.com/zmcp/odata-mcp/internal/transport/http"
@@ -212,6 +213,12 @@ func runBridge(cmd *cobra.Command, args []string) error {
 	}
 
 	if cfg.ServiceURL == "" {
+		// Transport-specific validation happens after the transport flag is known.
+	}
+
+	transportType, _ := cmd.Flags().GetString("transport")
+	allowEmptyService := transportType == "http" || transportType == "sse" || transportType == "streamable-http" || transportType == "streamable"
+	if cfg.ServiceURL == "" && !allowEmptyService {
 		return fmt.Errorf("OData service URL not provided. Use --service flag, positional argument, or ODATA_URL environment variable")
 	}
 
@@ -257,9 +264,6 @@ func runBridge(cmd *cobra.Command, args []string) error {
 	if cfg.Trace {
 		return printTraceInfo(odataBridge)
 	}
-
-	// Set up transport based on flag
-	transportType, _ := cmd.Flags().GetString("transport")
 
 	// Get the MCP server from the bridge
 	mcpServer := odataBridge.GetServer()
@@ -309,7 +313,16 @@ func runBridge(cmd *cobra.Command, args []string) error {
 				fmt.Fprintf(os.Stderr, "[VERBOSE] Header forwarding enabled - HTTP headers will be passed to OData service\n")
 			}
 		}
-		trans = http.NewStreamableHTTP(securityCfg.Addr, handler, securityCfg.Token != "", cfg.ForwardMCPHeaders)
+		dashboardProvider := dashboard.NewBridgeProvider(odataBridge, cfg, transportType, securityCfg.Addr)
+		if cfg.ServiceURL == "" {
+			if err := dashboardProvider.RestoreActiveConnection(context.Background()); err != nil && cfg.Verbose {
+				fmt.Fprintf(os.Stderr, "[VERBOSE] Failed to restore active dashboard connection: %v\n", err)
+			}
+		}
+
+		streamableTransport := http.NewStreamableHTTP(securityCfg.Addr, handler, securityCfg.Token != "", cfg.ForwardMCPHeaders)
+		streamableTransport.SetRouteRegistrar(dashboard.New(dashboardProvider).RegisterRoutes)
+		trans = streamableTransport
 	case "http", "sse":
 		securityCfg, err := buildSecurityConfig(cmd)
 		if err != nil {
@@ -323,7 +336,16 @@ func runBridge(cmd *cobra.Command, args []string) error {
 		if cfg.Verbose {
 			fmt.Fprintf(os.Stderr, "[VERBOSE] Starting HTTP/SSE transport on %s\n", securityCfg.Addr)
 		}
-		trans = http.NewSSE(securityCfg.Addr, handler)
+		dashboardProvider := dashboard.NewBridgeProvider(odataBridge, cfg, transportType, securityCfg.Addr)
+		if cfg.ServiceURL == "" {
+			if err := dashboardProvider.RestoreActiveConnection(context.Background()); err != nil && cfg.Verbose {
+				fmt.Fprintf(os.Stderr, "[VERBOSE] Failed to restore active dashboard connection: %v\n", err)
+			}
+		}
+
+		sseTransport := http.NewSSE(securityCfg.Addr, handler)
+		sseTransport.SetRouteRegistrar(dashboard.New(dashboardProvider).RegisterRoutes)
+		trans = sseTransport
 
 	case "stdio":
 		fallthrough

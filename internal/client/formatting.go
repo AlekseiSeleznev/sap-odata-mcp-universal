@@ -6,6 +6,7 @@ package client
 import (
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/zmcp/odata-mcp/internal/models"
@@ -29,8 +30,15 @@ func (c *ODataClient) buildKeyPredicate(key map[string]interface{}) string {
 	}
 
 	// Composite key
+	keys := make([]string, 0, len(key))
+	for k := range key {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
 	var parts []string
-	for k, v := range key {
+	for _, k := range keys {
+		v := key[k]
 		parts = append(parts, fmt.Sprintf("%s=%s", k, c.formatKeyValue(v)))
 	}
 	return strings.Join(parts, ",")

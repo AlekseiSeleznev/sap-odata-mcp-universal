@@ -459,6 +459,10 @@ Streamable HTTP endpoints:
 - `POST /mcp` - Main MCP endpoint (supports automatic SSE upgrade)
 - `GET /health` - Health check endpoint
 - `POST /sse` - Legacy SSE endpoint (for backward compatibility)
+- `GET /dashboard` - Embedded SAP OData connection manager dashboard
+- `GET /dashboard/docs` - Detailed bilingual dashboard and integration documentation
+- `GET /api/status` - Active SAP connection status for the dashboard
+- `GET /api/databases` - Saved SAP OData connection profiles
 
 #### Using HTTP/SSE Transport (Legacy)
 
@@ -485,6 +489,10 @@ Legacy HTTP/SSE endpoints:
 - `GET /health` - Health check endpoint
 - `GET /sse` - Server-Sent Events endpoint for real-time communication
 - `POST /rpc` - JSON-RPC endpoint for request/response communication
+- `GET /dashboard` - Embedded SAP OData connection manager dashboard
+- `GET /dashboard/docs` - Detailed bilingual dashboard and integration documentation
+- `GET /api/status` - Active SAP connection status for the dashboard
+- `GET /api/databases` - Saved SAP OData connection profiles
 
 #### Testing HTTP/SSE Transport
 

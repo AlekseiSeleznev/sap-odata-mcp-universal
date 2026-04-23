@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/zmcp/odata-mcp/internal/client"
 	"github.com/zmcp/odata-mcp/internal/config"
@@ -35,24 +36,17 @@ type ODataMCPBridge struct {
 
 // NewODataMCPBridge creates a new bridge instance
 func NewODataMCPBridge(cfg *config.Config) (*ODataMCPBridge, error) {
-	// Create OData client
-	odataClient := client.NewODataClient(cfg.ServiceURL, cfg.Verbose)
-
-	// Configure authentication
-	if cfg.HasBasicAuth() {
-		odataClient.SetBasicAuth(cfg.Username, cfg.Password)
-	} else if cfg.HasCookieAuth() {
-		odataClient.SetCookies(cfg.Cookies)
-	}
+	cfgCopy := cloneConfig(cfg)
+	odataClient := newClientFromConfig(cfgCopy)
 
 	// Create MCP server
 	mcpServer := mcp.NewServer(constants.MCPServerName, constants.MCPServerVersion)
 
 	// Set protocol version if specified
-	if cfg.ProtocolVersion != "" {
-		mcpServer.SetProtocolVersion(cfg.ProtocolVersion)
-		if cfg.Verbose {
-			fmt.Fprintf(os.Stderr, "[VERBOSE] Using MCP protocol version: %s\n", cfg.ProtocolVersion)
+	if cfgCopy.ProtocolVersion != "" {
+		mcpServer.SetProtocolVersion(cfgCopy.ProtocolVersion)
+		if cfgCopy.Verbose {
+			fmt.Fprintf(os.Stderr, "[VERBOSE] Using MCP protocol version: %s\n", cfgCopy.ProtocolVersion)
 		}
 	}
 
@@ -60,23 +54,23 @@ func NewODataMCPBridge(cfg *config.Config) (*ODataMCPBridge, error) {
 	hintMgr := hint.NewManager()
 
 	// Load hints from file if specified or default location
-	if err := hintMgr.LoadFromFile(cfg.HintsFile); err != nil {
-		if cfg.Verbose {
+	if err := hintMgr.LoadFromFile(cfgCopy.HintsFile); err != nil {
+		if cfgCopy.Verbose {
 			fmt.Fprintf(os.Stderr, "[VERBOSE] Failed to load hints file: %v\n", err)
 		}
 	}
 
 	// Set CLI hint if provided
-	if cfg.Hint != "" {
-		if err := hintMgr.SetCLIHint(cfg.Hint); err != nil {
-			if cfg.Verbose {
+	if cfgCopy.Hint != "" {
+		if err := hintMgr.SetCLIHint(cfgCopy.Hint); err != nil {
+			if cfgCopy.Verbose {
 				fmt.Fprintf(os.Stderr, "[VERBOSE] Failed to parse CLI hint: %v\n", err)
 			}
 		}
 	}
 
 	bridge := &ODataMCPBridge{
-		config:      cfg,
+		config:      cfgCopy,
 		client:      odataClient,
 		server:      mcpServer,
 		tools:       make(map[string]*models.ToolInfo),
@@ -84,12 +78,48 @@ func NewODataMCPBridge(cfg *config.Config) (*ODataMCPBridge, error) {
 		stopChan:    make(chan struct{}),
 	}
 
-	// Initialize metadata and tools
-	if err := bridge.initialize(); err != nil {
-		return nil, fmt.Errorf("failed to initialize bridge: %w", err)
+	// Initialize metadata and tools only when a service is configured.
+	if strings.TrimSpace(cfgCopy.ServiceURL) != "" {
+		if err := bridge.initialize(); err != nil {
+			return nil, fmt.Errorf("failed to initialize bridge: %w", err)
+		}
 	}
 
 	return bridge, nil
+}
+
+func cloneConfig(src *config.Config) *config.Config {
+	if src == nil {
+		return &config.Config{}
+	}
+
+	cfgCopy := *src
+	if src.Cookies != nil {
+		cfgCopy.Cookies = make(map[string]string, len(src.Cookies))
+		for key, value := range src.Cookies {
+			cfgCopy.Cookies[key] = value
+		}
+	}
+	if src.AllowedEntities != nil {
+		cfgCopy.AllowedEntities = append([]string(nil), src.AllowedEntities...)
+	}
+	if src.AllowedFunctions != nil {
+		cfgCopy.AllowedFunctions = append([]string(nil), src.AllowedFunctions...)
+	}
+
+	return &cfgCopy
+}
+
+func newClientFromConfig(cfg *config.Config) *client.ODataClient {
+	odataClient := client.NewODataClient(cfg.ServiceURL, cfg.Verbose)
+
+	if cfg.HasBasicAuth() {
+		odataClient.SetBasicAuth(cfg.Username, cfg.Password)
+	} else if cfg.HasCookieAuth() {
+		odataClient.SetCookies(cfg.Cookies)
+	}
+
+	return odataClient
 }
 
 // initialize loads metadata and generates tools
@@ -432,6 +462,154 @@ func (b *ODataMCPBridge) Stop() {
 	b.running = false
 	close(b.stopChan)
 	b.server.Stop()
+}
+
+// ApplyConfig reconfigures the bridge for a different OData service.
+// If ServiceURL is empty, the bridge is cleared and exposes no OData tools.
+func (b *ODataMCPBridge) ApplyConfig(cfg config.Config) error {
+	cfgCopy := cloneConfig(&cfg)
+	newClient := newClientFromConfig(cfgCopy)
+
+	var metadataSnapshot *models.ODataMetadata
+	if strings.TrimSpace(cfgCopy.ServiceURL) != "" {
+		metadata, err := newClient.GetMetadata(context.Background())
+		if err != nil {
+			return fmt.Errorf("failed to fetch metadata: %w", err)
+		}
+		metadataSnapshot = metadata
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	for name := range b.tools {
+		b.server.RemoveTool(name)
+	}
+	b.tools = make(map[string]*models.ToolInfo)
+	b.config = cfgCopy
+	b.client = newClient
+	b.metadata = metadataSnapshot
+
+	if cfgCopy.ProtocolVersion != "" {
+		b.server.SetProtocolVersion(cfgCopy.ProtocolVersion)
+	} else {
+		b.server.SetProtocolVersion(constants.MCPProtocolVersion)
+	}
+
+	if metadataSnapshot == nil {
+		return nil
+	}
+
+	if err := b.generateTools(); err != nil {
+		return fmt.Errorf("failed to generate tools: %w", err)
+	}
+
+	return nil
+}
+
+// GetConfigSnapshot returns a safe copy of the active configuration.
+func (b *ODataMCPBridge) GetConfigSnapshot() (config.Config, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if b.config == nil {
+		return config.Config{}, fmt.Errorf("bridge config not initialized")
+	}
+
+	cfg := *b.config
+	if b.config.Cookies != nil {
+		cfg.Cookies = make(map[string]string, len(b.config.Cookies))
+		for key, value := range b.config.Cookies {
+			cfg.Cookies[key] = value
+		}
+	}
+
+	return cfg, nil
+}
+
+// GetMetadataSnapshot returns a copy of the loaded metadata for dashboard consumers.
+func (b *ODataMCPBridge) GetMetadataSnapshot() (*models.ODataMetadata, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if b.metadata == nil {
+		return nil, fmt.Errorf("metadata not initialized")
+	}
+
+	meta := *b.metadata
+	meta.EntityTypes = make(map[string]*models.EntityType, len(b.metadata.EntityTypes))
+	for key, value := range b.metadata.EntityTypes {
+		entityCopy := *value
+		meta.EntityTypes[key] = &entityCopy
+	}
+	meta.EntitySets = make(map[string]*models.EntitySet, len(b.metadata.EntitySets))
+	for key, value := range b.metadata.EntitySets {
+		setCopy := *value
+		meta.EntitySets[key] = &setCopy
+	}
+	meta.FunctionImports = make(map[string]*models.FunctionImport, len(b.metadata.FunctionImports))
+	for key, value := range b.metadata.FunctionImports {
+		fnCopy := *value
+		meta.FunctionImports[key] = &fnCopy
+	}
+
+	return &meta, nil
+}
+
+// GetRuntimeSnapshot returns a compact bridge state projection for the dashboard.
+func (b *ODataMCPBridge) GetRuntimeSnapshot() (*models.DashboardStatus, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if b.config == nil {
+		return nil, fmt.Errorf("bridge config not initialized")
+	}
+
+	authMode := "Anonymous"
+	if b.config.HasBasicAuth() {
+		authMode = fmt.Sprintf("Basic (%s)", b.config.Username)
+	} else if b.config.HasCookieAuth() {
+		authMode = fmt.Sprintf("Cookie (%d)", len(b.config.Cookies))
+	}
+
+	readOnlyMode := "Read / Write"
+	if b.config.ReadOnly {
+		readOnlyMode = "Read-only"
+	} else if b.config.ReadOnlyButFunctions {
+		readOnlyMode = "Read-only + Functions"
+	}
+
+	protocolVersion := "2024-11-05"
+	if b.config.ProtocolVersion != "" {
+		protocolVersion = b.config.ProtocolVersion
+	}
+
+	summary := models.MetadataSummary{}
+	var lastLoadedAt time.Time
+	isSAP := false
+	if b.metadata != nil {
+		summary = models.MetadataSummary{
+			EntityTypes:     len(b.metadata.EntityTypes),
+			EntitySets:      len(b.metadata.EntitySets),
+			FunctionImports: len(b.metadata.FunctionImports),
+		}
+		isSAP = b.isSAPService()
+		lastLoadedAt = b.metadata.ParsedAt
+	}
+
+	status := &models.DashboardStatus{
+		ServiceURL:      b.config.ServiceURL,
+		AuthMode:        authMode,
+		ReadOnlyMode:    readOnlyMode,
+		UniversalTool:   b.config.UniversalTool,
+		ProtocolVersion: protocolVersion,
+		IsSAPService:    isSAP,
+		ToolCount:       len(b.server.GetTools()),
+		MetadataSummary: summary,
+		LastLoadedAt:    lastLoadedAt,
+	}
+
+	return status, nil
 }
 
 // GetTraceInfo returns comprehensive trace information
