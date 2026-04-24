@@ -158,7 +158,7 @@ go build -o sap-odata-mcp-universal ./cmd/sap-odata-mcp-universal
 
 После старта:
 
-- dashboard: `http://localhost:8080/dashboard?token=dev-token`
+- dashboard: `http://localhost:8080/dashboard`
 - документация: `http://localhost:8080/dashboard/docs`
 - MCP endpoint: `http://localhost:8080/mcp`
 - health check: `http://localhost:8080/health`
@@ -166,12 +166,11 @@ go build -o sap-odata-mcp-universal ./cmd/sap-odata-mcp-universal
 Дальше:
 
 1. Откройте dashboard.
-2. Если открыли dashboard без query-параметра, введите MCP token в модальном окне. UI хранит его только в `sessionStorage`.
-3. Создайте SAP систему: имя, base URL, client/mandant, логин и пароль.
-4. Добавьте OData сервисы в каталог системы.
-5. Создайте бизнес-объекты и операции `GET`, `LIST`, `POST`, `PATCH/PUT`, `DELETE`, привязав каждую операцию к нужному сервису и entity set.
-6. Сделайте систему активной.
-7. Подключите AI-клиент к `/mcp` с тем же bearer token.
+2. Создайте SAP систему: имя, base URL, client/mandant, логин и пароль.
+3. Добавьте OData сервисы в каталог системы.
+4. Создайте бизнес-объекты и операции `GET`, `LIST`, `POST`, `PATCH/PUT`, `DELETE`, привязав каждую операцию к нужному сервису и entity set.
+5. Сделайте систему активной.
+6. Подключите AI-клиент к `/mcp` с тем же bearer token.
 
 Важно: в HTTP-режиме токен обязателен даже на `localhost`.
 
@@ -482,7 +481,7 @@ Dashboard хранит режим доступа на уровне профил�
 
 Root `/` редиректит на `/dashboard`.
 
-Если сервер запущен с `--mcp-token`, маршруты `/api/*`, `/mcp`, `/rpc` и `/sse` требуют token на каждом запросе. Dashboard принимает token через модальное окно или query-параметр `?token=...` и дальше отправляет его как `Authorization: Bearer ...`.
+Если сервер запущен с `--mcp-token`, MCP маршруты `/mcp`, `/rpc` и `/sse` требуют token на каждом запросе. Dashboard API `/api/*` доступен без token только с той же машины через loopback (`localhost`, `127.0.0.1`, `::1`), чтобы локальный браузер не требовал ручного ввода token. Для удалённого доступа к `/api/*` нужен `Authorization: Bearer ...`.
 
 ---
 
@@ -706,13 +705,13 @@ curl -H 'Authorization: Bearer dev-token' http://localhost:8080/api/systems
 
 6. **Dashboard показывает запрос MCP token**
 
-Это ожидаемо, если сервер запущен с `--mcp-token`. Откройте:
+Это ожидаемо при удалённом доступе к dashboard API или если страница открыта не через loopback hostname. Для локальной работы откройте:
 
 ```text
-http://localhost:8080/dashboard?token=dev-token
+http://localhost:8080/dashboard
 ```
 
-или введите token в модальном окне. UI сохранит его только в `sessionStorage` текущей вкладки.
+Для удалённого доступа введите token в модальном окне или откройте `http://host:8080/dashboard?token=...`. UI сохранит его только в `sessionStorage` текущей вкладки.
 
 Для дополнительной диагностики используйте:
 

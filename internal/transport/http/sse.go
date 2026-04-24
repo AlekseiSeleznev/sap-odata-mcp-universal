@@ -108,7 +108,7 @@ func (t *SSETransport) withSecurity(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		if t.requiresAuth(r.URL.Path) && !ValidateRequestToken(r, t.token) {
+		if t.requiresAuth(r) && !ValidateRequestToken(r, t.token) {
 			WriteUnauthorized(w)
 			return
 		}
@@ -116,8 +116,12 @@ func (t *SSETransport) withSecurity(next http.Handler) http.Handler {
 	})
 }
 
-func (t *SSETransport) requiresAuth(path string) bool {
+func (t *SSETransport) requiresAuth(r *http.Request) bool {
 	if t.token == "" {
+		return false
+	}
+	path := r.URL.Path
+	if strings.HasPrefix(path, "/api/") && isLocalhost(r.RemoteAddr) && isLocalhost(r.Host) {
 		return false
 	}
 	return path == "/sse" || path == "/rpc" || strings.HasPrefix(path, "/api/")

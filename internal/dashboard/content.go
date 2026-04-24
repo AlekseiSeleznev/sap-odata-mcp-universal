@@ -273,8 +273,9 @@ materials_create_for_s4d-100</code></pre>
 <ul>
 <li>State file: <code>%s</code></li>
 <li>Пароли сохраняются для восстановления активной системы после перезапуска. На диске они не шифруются.</li>
-<li>Если сервер запущен с <code>--mcp-token</code>, маршруты <code>/api/*</code>, <code>/mcp</code>, <code>/rpc</code> и <code>/sse</code> требуют token на каждом запросе.</li>
-<li>Dashboard принимает token через модальное окно или query-параметр <code>?token=...</code>, хранит его только в browser <code>sessionStorage</code> и отправляет в <code>Authorization: Bearer ...</code>.</li>
+<li>Если сервер запущен с <code>--mcp-token</code>, MCP маршруты <code>/mcp</code>, <code>/rpc</code> и <code>/sse</code> требуют token на каждом запросе.</li>
+<li>Dashboard API <code>/api/*</code> доступен без token только с той же машины через loopback (<code>localhost</code>, <code>127.0.0.1</code>, <code>::1</code>), чтобы локальный браузер не требовал ручного ввода token.</li>
+<li>При удалённом доступе dashboard принимает token через модальное окно или query-параметр <code>?token=...</code>, хранит его только в browser <code>sessionStorage</code> и отправляет в <code>Authorization: Bearer ...</code>.</li>
 <li>Если HTTP transport открыт наружу, используйте MCP token, TLS и нормальные сетевые ограничения.</li>
 <li>В режиме <code>restricted</code> runtime оставляет tools доступными, но возвращает ошибку при попытке выполнить mutating operation.</li>
 </ul>
@@ -387,8 +388,9 @@ materials_create_for_s4d-100</code></pre>
 <ul>
 <li>State file: <code>%s</code></li>
 <li>Passwords are persisted for restart recovery and are not encrypted on disk.</li>
-<li>When the server runs with <code>--mcp-token</code>, <code>/api/*</code>, <code>/mcp</code>, <code>/rpc</code>, and <code>/sse</code> require a token on every request.</li>
-<li>The dashboard accepts the token via a modal dialog or <code>?token=...</code>, stores it only in browser <code>sessionStorage</code>, and sends <code>Authorization: Bearer ...</code>.</li>
+<li>When the server runs with <code>--mcp-token</code>, MCP routes <code>/mcp</code>, <code>/rpc</code>, and <code>/sse</code> require a token on every request.</li>
+<li>The dashboard API <code>/api/*</code> is available without a token only from the same machine over loopback (<code>localhost</code>, <code>127.0.0.1</code>, <code>::1</code>) so the local browser does not require manual token entry.</li>
+<li>For remote access, the dashboard accepts the token via a modal dialog or <code>?token=...</code>, stores it only in browser <code>sessionStorage</code>, and sends <code>Authorization: Bearer ...</code>.</li>
 <li>For remote HTTP exposure, use MCP token, TLS, and proper network boundaries.</li>
 <li>In <code>restricted</code> mode, mutating tools remain visible but return an explicit error when a write is attempted.</li>
 </ul>

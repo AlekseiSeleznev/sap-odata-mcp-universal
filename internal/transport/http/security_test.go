@@ -279,3 +279,26 @@ func TestValidateRequestToken(t *testing.T) {
 		})
 	}
 }
+
+func TestDashboardAPIAuthBypassForLocalBrowser(t *testing.T) {
+	streamable := NewStreamableHTTP("localhost:8080", nil, "secret-token-123", false)
+	sse := NewSSE("localhost:8080", nil, "secret-token-123")
+
+	localAPI := httptest.NewRequest(http.MethodGet, "http://localhost:8080/api/systems", nil)
+	localAPI.RemoteAddr = "127.0.0.1:52344"
+	assert.False(t, streamable.requiresAuth(localAPI))
+	assert.False(t, sse.requiresAuth(localAPI))
+
+	remoteAPI := httptest.NewRequest(http.MethodGet, "http://example.com:8080/api/systems", nil)
+	remoteAPI.RemoteAddr = "192.168.10.20:52344"
+	assert.True(t, streamable.requiresAuth(remoteAPI))
+	assert.True(t, sse.requiresAuth(remoteAPI))
+
+	localMCP := httptest.NewRequest(http.MethodPost, "http://localhost:8080/mcp", nil)
+	localMCP.RemoteAddr = "127.0.0.1:52344"
+	assert.True(t, streamable.requiresAuth(localMCP))
+
+	localRPC := httptest.NewRequest(http.MethodPost, "http://localhost:8080/rpc", nil)
+	localRPC.RemoteAddr = "127.0.0.1:52344"
+	assert.True(t, sse.requiresAuth(localRPC))
+}

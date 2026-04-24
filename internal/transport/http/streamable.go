@@ -126,7 +126,7 @@ func (t *StreamableHTTPTransport) addSecurityHeaders(next http.Handler) http.Han
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		if t.requiresAuth(r.URL.Path) && !ValidateRequestToken(r, t.token) {
+		if t.requiresAuth(r) && !ValidateRequestToken(r, t.token) {
 			WriteUnauthorized(w)
 			return
 		}
@@ -135,8 +135,12 @@ func (t *StreamableHTTPTransport) addSecurityHeaders(next http.Handler) http.Han
 	})
 }
 
-func (t *StreamableHTTPTransport) requiresAuth(path string) bool {
+func (t *StreamableHTTPTransport) requiresAuth(r *http.Request) bool {
 	if t.token == "" {
+		return false
+	}
+	path := r.URL.Path
+	if strings.HasPrefix(path, "/api/") && isLocalhost(r.RemoteAddr) && isLocalhost(r.Host) {
 		return false
 	}
 	return path == "/mcp" || path == "/sse" || strings.HasPrefix(path, "/api/")
