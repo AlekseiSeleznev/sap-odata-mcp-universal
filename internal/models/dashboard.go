@@ -33,6 +33,7 @@ type DashboardSystem struct {
 	BaseURL     string             `json:"base_url,omitempty"`
 	Client      string             `json:"client,omitempty"`
 	Username    string             `json:"username"`
+	HasPassword bool               `json:"has_password"`
 	AccessMode  string             `json:"access_mode"`
 	Connected   bool               `json:"connected"`
 	Active      bool               `json:"active"`
@@ -150,6 +151,27 @@ type ConnectionTestResult struct {
 	IsSAPService    bool            `json:"is_sap_service"`
 	MetadataSummary MetadataSummary `json:"metadata_summary"`
 	Version         string          `json:"version"`
+}
+
+type DashboardServiceTestResult struct {
+	ServiceID       string          `json:"service_id"`
+	ServiceName     string          `json:"service_name"`
+	ServiceURL      string          `json:"service_url"`
+	OK              bool            `json:"ok"`
+	Message         string          `json:"message"`
+	DurationMs      int64           `json:"duration_ms"`
+	IsSAPService    bool            `json:"is_sap_service"`
+	MetadataSummary MetadataSummary `json:"metadata_summary"`
+	Version         string          `json:"version"`
+}
+
+type DashboardSystemTestResult struct {
+	OK         bool                         `json:"ok"`
+	Message    string                       `json:"message"`
+	SystemID   string                       `json:"system_id"`
+	SystemName string                       `json:"system_name"`
+	DurationMs int64                        `json:"duration_ms"`
+	Services   []DashboardServiceTestResult `json:"services"`
 }
 
 type MetadataOverview struct {

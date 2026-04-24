@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"reflect"
 	"strings"
+	"time"
 
 	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/bridge"
 	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/config"
@@ -14,6 +16,7 @@ import (
 type Provider interface {
 	Status(ctx context.Context) (*models.DashboardHierarchyStatus, error)
 	Systems(ctx context.Context) ([]models.DashboardSystem, error)
+	TestSystem(ctx context.Context, id string) (*models.DashboardSystemTestResult, error)
 	SaveSystem(ctx context.Context, req models.DashboardSystemUpsertRequest) (*models.DashboardMutationResult, error)
 	DeleteSystem(ctx context.Context, id string) (*models.DashboardMutationResult, error)
 	ActivateSystem(ctx context.Context, id string) (*models.DashboardMutationResult, error)
@@ -58,7 +61,7 @@ func (p *BridgeProvider) RestoreActiveConnection(ctx context.Context) error {
 	_ = ctx
 	systems := p.registry.ListAll()
 	active := p.registry.Active()
-	return p.applyAndPersist(systems, active)
+	return p.applyAndPersist(ctx, systems, active)
 }
 
 func (p *BridgeProvider) Status(ctx context.Context) (*models.DashboardHierarchyStatus, error) {
@@ -93,16 +96,17 @@ func (p *BridgeProvider) Systems(ctx context.Context) ([]models.DashboardSystem,
 	result := make([]models.DashboardSystem, 0, len(systems))
 	for _, system := range systems {
 		item := models.DashboardSystem{
-			ID:         system.ID,
-			Name:       system.Name,
-			BaseURL:    system.BaseURL,
-			Client:     system.Client,
-			Username:   system.Username,
-			AccessMode: system.AccessMode,
-			Connected:  system.Connected,
-			Active:     system.ID == activeID,
-			Services:   make([]models.DashboardService, 0, len(system.Services)),
-			Entities:   make([]models.DashboardEntity, 0, len(system.Entities)),
+			ID:          system.ID,
+			Name:        system.Name,
+			BaseURL:     system.BaseURL,
+			Client:      system.Client,
+			Username:    system.Username,
+			HasPassword: system.Password != "",
+			AccessMode:  system.AccessMode,
+			Connected:   system.Connected,
+			Active:      system.ID == activeID,
+			Services:    make([]models.DashboardService, 0, len(system.Services)),
+			Entities:    make([]models.DashboardEntity, 0, len(system.Entities)),
 		}
 		for _, service := range system.Services {
 			item.Services = append(item.Services, models.DashboardService{
@@ -174,10 +178,89 @@ func (p *BridgeProvider) SaveSystem(ctx context.Context, req models.DashboardSys
 		}
 	}
 
-	if err := p.applyAndPersist(systems, active); err != nil {
+	if oldIndex >= 0 && active == system.ID && onlyAccessModeChanged(current, system) {
+		for i := range systems {
+			systems[i].Connected = active != "" && systems[i].ID == active
+		}
+		p.registry.ReplaceLoadedSystems(systems, active)
+		p.runtime.SetActiveAccessMode(system.ID, system.AccessMode)
+		return p.mutationResult(ctx, "saved"), nil
+	}
+
+	if err := p.applyAndPersist(ctx, systems, active); err != nil {
 		return p.mutationError(ctx, err), nil
 	}
 	return p.mutationResult(ctx, "saved"), nil
+}
+
+func (p *BridgeProvider) TestSystem(ctx context.Context, id string) (*models.DashboardSystemTestResult, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, fmt.Errorf("system id is required")
+	}
+
+	system, ok := p.registry.Get(id)
+	if !ok {
+		return nil, fmt.Errorf("system %q not found", id)
+	}
+	if len(system.Services) == 0 {
+		return &models.DashboardSystemTestResult{
+			OK:         false,
+			Message:    "system has no services to test",
+			SystemID:   system.ID,
+			SystemName: system.Name,
+			Services:   []models.DashboardServiceTestResult{},
+		}, nil
+	}
+
+	startedAll := time.Now()
+	result := &models.DashboardSystemTestResult{
+		OK:         true,
+		SystemID:   system.ID,
+		SystemName: system.Name,
+		Services:   make([]models.DashboardServiceTestResult, 0, len(system.Services)),
+	}
+	for _, service := range system.Services {
+		started := time.Now()
+		discovery, err := p.runtime.Discover(ctx, system, service.ID)
+		duration := time.Since(started).Milliseconds()
+		item := models.DashboardServiceTestResult{
+			ServiceID:   service.ID,
+			ServiceName: service.Name,
+			ServiceURL:  service.safeServiceURL(),
+			DurationMs:  duration,
+		}
+		if err != nil {
+			item.OK = false
+			item.Message = err.Error()
+			result.OK = false
+		} else {
+			item.OK = true
+			item.Message = "metadata loaded"
+			item.ServiceURL = discovery.SafeServiceURL
+			item.IsSAPService = strings.HasPrefix(strings.ToLower(discovery.SchemaNamespace), "sap") ||
+				strings.Contains(strings.ToLower(discovery.ServiceURL), "/sap/opu/odata/")
+			item.Version = discovery.Version
+			item.MetadataSummary = models.MetadataSummary{
+				EntitySets:      len(discovery.EntitySets),
+				FunctionImports: len(discovery.FunctionImports),
+			}
+		}
+		result.Services = append(result.Services, item)
+	}
+	result.DurationMs = time.Since(startedAll).Milliseconds()
+	okCount := 0
+	for _, service := range result.Services {
+		if service.OK {
+			okCount++
+		}
+	}
+	if result.OK {
+		result.Message = fmt.Sprintf("connection to %s verified (%d/%d services)", system.Name, okCount, len(result.Services))
+	} else {
+		result.Message = fmt.Sprintf("connection test failed for %s (%d/%d services)", system.Name, okCount, len(result.Services))
+	}
+	return result, nil
 }
 
 func (p *BridgeProvider) DeleteSystem(ctx context.Context, id string) (*models.DashboardMutationResult, error) {
@@ -204,7 +287,7 @@ func (p *BridgeProvider) DeleteSystem(ctx context.Context, id string) (*models.D
 			active = filtered[0].ID
 		}
 	}
-	if err := p.applyAndPersist(filtered, active); err != nil {
+	if err := p.applyAndPersist(ctx, filtered, active); err != nil {
 		return p.mutationError(ctx, err), nil
 	}
 	return p.mutationResult(ctx, "deleted"), nil
@@ -219,7 +302,7 @@ func (p *BridgeProvider) ActivateSystem(ctx context.Context, id string) (*models
 	if _, idx := findSystemIndex(systems, id); idx < 0 {
 		return p.mutationError(ctx, fmt.Errorf("system %q not found", id)), nil
 	}
-	if err := p.applyAndPersist(systems, id); err != nil {
+	if err := p.applyAndPersist(ctx, systems, id); err != nil {
 		return p.mutationError(ctx, err), nil
 	}
 	return p.mutationResult(ctx, "activated"), nil
@@ -262,7 +345,7 @@ func (p *BridgeProvider) SaveService(ctx context.Context, req models.DashboardSe
 	}
 	systems[sysIndex] = sanitizeSystem(system)
 
-	if err := p.applyAndPersist(systems, p.registry.Active()); err != nil {
+	if err := p.applyAndPersist(ctx, systems, p.registry.Active()); err != nil {
 		return p.mutationError(ctx, err), nil
 	}
 	return p.mutationResult(ctx, "saved"), nil
@@ -307,7 +390,7 @@ func (p *BridgeProvider) DeleteService(ctx context.Context, req models.Dashboard
 	system.Services = filtered
 	systems[sysIndex] = sanitizeSystem(system)
 
-	if err := p.applyAndPersist(systems, p.registry.Active()); err != nil {
+	if err := p.applyAndPersist(ctx, systems, p.registry.Active()); err != nil {
 		return p.mutationError(ctx, err), nil
 	}
 	return p.mutationResult(ctx, "deleted"), nil
@@ -337,14 +420,14 @@ func (p *BridgeProvider) SaveEntity(ctx context.Context, req models.DashboardEnt
 			}
 		}
 		if !replaced {
-			return p.mutationError(ctx, fmt.Errorf("entity %q not found", oldID)), nil
+			return p.mutationError(ctx, fmt.Errorf("object %q not found", oldID)), nil
 		}
 	} else {
 		system.Entities = append(system.Entities, entity)
 	}
 	systems[sysIndex] = sanitizeSystem(system)
 
-	if err := p.applyAndPersist(systems, p.registry.Active()); err != nil {
+	if err := p.applyAndPersist(ctx, systems, p.registry.Active()); err != nil {
 		return p.mutationError(ctx, err), nil
 	}
 	return p.mutationResult(ctx, "saved"), nil
@@ -362,7 +445,7 @@ func (p *BridgeProvider) DeleteEntity(ctx context.Context, req models.DashboardD
 		entityID = strings.TrimSpace(req.ID)
 	}
 	if entityID == "" {
-		return p.mutationError(ctx, fmt.Errorf("entity id is required")), nil
+		return p.mutationError(ctx, fmt.Errorf("object id is required")), nil
 	}
 
 	filtered := make([]EntityInfo, 0, len(system.Entities))
@@ -372,12 +455,12 @@ func (p *BridgeProvider) DeleteEntity(ctx context.Context, req models.DashboardD
 		}
 	}
 	if len(filtered) == len(system.Entities) {
-		return p.mutationError(ctx, fmt.Errorf("entity %q not found", entityID)), nil
+		return p.mutationError(ctx, fmt.Errorf("object %q not found", entityID)), nil
 	}
 	system.Entities = filtered
 	systems[sysIndex] = sanitizeSystem(system)
 
-	if err := p.applyAndPersist(systems, p.registry.Active()); err != nil {
+	if err := p.applyAndPersist(ctx, systems, p.registry.Active()); err != nil {
 		return p.mutationError(ctx, err), nil
 	}
 	return p.mutationResult(ctx, "deleted"), nil
@@ -391,10 +474,10 @@ func (p *BridgeProvider) SaveOperation(ctx context.Context, req models.Dashboard
 	}
 	entity, entityIndex := findEntityIndex(system.Entities, req.EntityID)
 	if entityIndex < 0 {
-		return p.mutationError(ctx, fmt.Errorf("entity %q not found", req.EntityID)), nil
+		return p.mutationError(ctx, fmt.Errorf("object %q not found", req.EntityID)), nil
 	}
 
-	op, err := p.operationFromRequest(system, entity, req)
+	op, err := p.operationFromRequest(ctx, system, entity, req)
 	if err != nil {
 		return p.mutationError(ctx, err), nil
 	}
@@ -418,7 +501,7 @@ func (p *BridgeProvider) SaveOperation(ctx context.Context, req models.Dashboard
 	system.Entities[entityIndex] = entity
 	systems[sysIndex] = sanitizeSystem(system)
 
-	if err := p.applyAndPersist(systems, p.registry.Active()); err != nil {
+	if err := p.applyAndPersist(ctx, systems, p.registry.Active()); err != nil {
 		return p.mutationError(ctx, err), nil
 	}
 	return p.mutationResult(ctx, "saved"), nil
@@ -432,7 +515,7 @@ func (p *BridgeProvider) DeleteOperation(ctx context.Context, req models.Dashboa
 	}
 	entity, entityIndex := findEntityIndex(system.Entities, req.EntityID)
 	if entityIndex < 0 {
-		return p.mutationError(ctx, fmt.Errorf("entity %q not found", req.EntityID)), nil
+		return p.mutationError(ctx, fmt.Errorf("object %q not found", req.EntityID)), nil
 	}
 
 	opID := strings.TrimSpace(req.OperationID)
@@ -456,7 +539,7 @@ func (p *BridgeProvider) DeleteOperation(ctx context.Context, req models.Dashboa
 	system.Entities[entityIndex] = entity
 	systems[sysIndex] = sanitizeSystem(system)
 
-	if err := p.applyAndPersist(systems, p.registry.Active()); err != nil {
+	if err := p.applyAndPersist(ctx, systems, p.registry.Active()); err != nil {
 		return p.mutationError(ctx, err), nil
 	}
 	return p.mutationResult(ctx, "deleted"), nil
@@ -468,7 +551,7 @@ func (p *BridgeProvider) DiscoverService(ctx context.Context, systemID, serviceI
 	if !ok {
 		return nil, fmt.Errorf("system %q not found", systemID)
 	}
-	return p.runtime.Discover(system, serviceID)
+	return p.runtime.Discover(ctx, system, serviceID)
 }
 
 func (p *BridgeProvider) DocsContext(ctx context.Context) (*models.DashboardDocumentationContext, error) {
@@ -510,7 +593,7 @@ func (p *BridgeProvider) DocsContext(ctx context.Context) (*models.DashboardDocu
 	}, nil
 }
 
-func (p *BridgeProvider) applyAndPersist(systems []SystemInfo, active string) error {
+func (p *BridgeProvider) applyAndPersist(ctx context.Context, systems []SystemInfo, active string) error {
 	var err error
 	if active == "" {
 		err = p.runtime.Clear()
@@ -519,7 +602,7 @@ func (p *BridgeProvider) applyAndPersist(systems []SystemInfo, active string) er
 		if idx < 0 {
 			return fmt.Errorf("active system %q not found", active)
 		}
-		err = p.runtime.ApplySystem(system)
+		err = p.runtime.ApplySystem(ctx, system)
 	}
 	if err != nil {
 		return err
@@ -581,6 +664,10 @@ func (p *BridgeProvider) systemFromRequest(existing []SystemInfo, req models.Das
 		}
 	}
 
+	if system.ID == "" && strings.TrimSpace(req.OldID) != "" && current.ID != "" {
+		system.ID = current.ID
+	}
+
 	if system.ID == "" {
 		system.ID = ensureUniqueID(system.Name+"-"+system.Client, func(id string) bool {
 			for _, item := range existing {
@@ -602,6 +689,16 @@ func (p *BridgeProvider) systemFromRequest(existing []SystemInfo, req models.Das
 	}
 
 	return sanitizeSystem(system), nil
+}
+
+func onlyAccessModeChanged(before, after SystemInfo) bool {
+	left := sanitizeSystem(before)
+	right := sanitizeSystem(after)
+	left.Connected = false
+	right.Connected = false
+	left.AccessMode = ""
+	right.AccessMode = ""
+	return reflect.DeepEqual(left, right)
 }
 
 func (p *BridgeProvider) serviceFromRequest(system SystemInfo, req models.DashboardServiceUpsertRequest) (ServiceInfo, error) {
@@ -647,7 +744,7 @@ func entityFromRequest(system SystemInfo, req models.DashboardEntityUpsertReques
 		Description: strings.TrimSpace(req.Description),
 	}
 	if entity.Label == "" {
-		return EntityInfo{}, fmt.Errorf("entity label is required")
+		return EntityInfo{}, fmt.Errorf("object name is required")
 	}
 	if entity.ID == "" {
 		entity.ID = ensureUniqueID(entity.Label, func(id string) bool {
@@ -664,13 +761,13 @@ func entityFromRequest(system SystemInfo, req models.DashboardEntityUpsertReques
 			continue
 		}
 		if item.ID == entity.ID {
-			return EntityInfo{}, fmt.Errorf("entity id %q already exists", entity.ID)
+			return EntityInfo{}, fmt.Errorf("object id %q already exists", entity.ID)
 		}
 	}
 	return entity, nil
 }
 
-func (p *BridgeProvider) operationFromRequest(system SystemInfo, entity EntityInfo, req models.DashboardOperationUpsertRequest) (OperationInfo, error) {
+func (p *BridgeProvider) operationFromRequest(ctx context.Context, system SystemInfo, entity EntityInfo, req models.DashboardOperationUpsertRequest) (OperationInfo, error) {
 	op := OperationInfo{
 		ID:        strings.TrimSpace(req.ID),
 		Verb:      normalizeVerb(req.Verb),
@@ -711,11 +808,11 @@ func (p *BridgeProvider) operationFromRequest(system SystemInfo, entity EntityIn
 			return OperationInfo{}, fmt.Errorf("operation id %q already exists", op.ID)
 		}
 		if normalizeVerb(item.Verb) == op.Verb {
-			return OperationInfo{}, fmt.Errorf("operation %q already exists for this entity", op.Verb)
+			return OperationInfo{}, fmt.Errorf("operation %q already exists for this object", op.Verb)
 		}
 	}
 
-	discovery, err := p.runtime.Discover(system, op.ServiceID)
+	discovery, err := p.runtime.Discover(ctx, system, op.ServiceID)
 	if err != nil {
 		return OperationInfo{}, err
 	}

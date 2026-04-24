@@ -4,6 +4,8 @@
 package http
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -242,6 +244,38 @@ func TestValidateToken(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ValidateToken(tt.provided, tt.expected)
 			assert.Equal(t, tt.valid, result)
+		})
+	}
+}
+
+// TestValidateRequestToken verifies all supported dashboard/MCP token channels.
+func TestValidateRequestToken(t *testing.T) {
+	tests := []struct {
+		name       string
+		path       string
+		headerName string
+		header     string
+		want       bool
+	}{
+		{name: "authorization bearer", headerName: "Authorization", header: "Bearer secret-token-123", want: true},
+		{name: "x mcp token", headerName: "X-MCP-Token", header: "secret-token-123", want: true},
+		{name: "query token", path: "/api/systems?token=secret-token-123", want: true},
+		{name: "query access token", path: "/api/systems?access_token=secret-token-123", want: true},
+		{name: "wrong token", headerName: "Authorization", header: "Bearer wrong-token", want: false},
+		{name: "missing token", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := tt.path
+			if path == "" {
+				path = "/api/systems"
+			}
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			if tt.headerName != "" {
+				req.Header.Set(tt.headerName, tt.header)
+			}
+			assert.Equal(t, tt.want, ValidateRequestToken(req, "secret-token-123"))
 		})
 	}
 }

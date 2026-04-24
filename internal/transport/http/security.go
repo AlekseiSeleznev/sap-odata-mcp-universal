@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 )
 
@@ -117,4 +118,33 @@ func ValidateToken(provided, expected string) bool {
 		return true
 	}
 	return subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
+}
+
+// RequestToken extracts a bearer token from an HTTP request.
+func RequestToken(r *http.Request) string {
+	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	if auth != "" {
+		parts := strings.SplitN(auth, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			return strings.TrimSpace(parts[1])
+		}
+	}
+	if token := strings.TrimSpace(r.Header.Get("X-MCP-Token")); token != "" {
+		return token
+	}
+	if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
+		return token
+	}
+	return strings.TrimSpace(r.URL.Query().Get("access_token"))
+}
+
+// ValidateRequestToken validates a request token against the configured MCP token.
+func ValidateRequestToken(r *http.Request, expected string) bool {
+	return ValidateToken(RequestToken(r), expected)
+}
+
+// WriteUnauthorized writes a JSON-friendly bearer-token challenge.
+func WriteUnauthorized(w http.ResponseWriter) {
+	w.Header().Set("WWW-Authenticate", `Bearer realm="sap-odata-mcp-universal"`)
+	http.Error(w, "Unauthorized", http.StatusUnauthorized)
 }

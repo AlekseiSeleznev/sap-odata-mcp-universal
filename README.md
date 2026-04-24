@@ -2,7 +2,7 @@
 
 Единый MCP-сервер для работы с SAP OData из AI-ассистентов и любых MCP-клиентов
 
-Один endpoint `http://localhost:8080/mcp` вместо ручного запуска отдельного bridge под каждую SAP-систему. В HTTP-режиме сервер поднимает двуязычный dashboard на `http://localhost:8080/dashboard`, где можно сохранять несколько SAP OData-подключений по логину и паролю, переключать активную систему без рестарта и сразу отдавать актуальный набор MCP-инструментов.
+Один endpoint `http://localhost:8080/mcp` вместо ручного запуска отдельного bridge под каждую SAP-систему и каждый OData-сервис. В HTTP-режиме сервер поднимает двуязычный dashboard на `http://localhost:8080/dashboard`, где конфигурация строится иерархически: `System → Service Catalog → Object → Operation`. Это позволяет хранить общие SAP credentials на уровне системы, добавлять несколько OData-сервисов внутри одной SAP-системы и связывать разные операции одного бизнес-объекта с разными сервисами.
 
 `sap-odata-mcp-universal` поддерживает:
 
@@ -33,7 +33,9 @@
   - [Cursor / Windsurf / другие HTTP MCP-клиенты](#cursor--windsurf--другие-http-mcp-клиенты)
 - [Веб-дашборд](#веб-дашборд)
   - [Что умеет dashboard](#что-умеет-dashboard)
-  - [Поля подключения](#поля-подключения)
+  - [Модель dashboard](#модель-dashboard)
+  - [Поля системы](#поля-системы)
+  - [Поля сервиса](#поля-сервиса)
   - [Режимы доступа](#режимы-доступа)
   - [Хранение состояния](#хранение-состояния)
   - [HTTP endpoints](#http-endpoints)
@@ -56,7 +58,7 @@
 |---|---|
 | **SAP OData** | Автозагрузка metadata, генерация MCP tools, поддержка SAP-специфики |
 | **Транспорты** | `stdio`, `http` (SSE), `streamable-http` |
-| **Dashboard** | Несколько сохранённых SAP систем, переключение активной системы, RU/EN UI и docs |
+| **Dashboard** | Несколько SAP систем, несколько OData сервисов в системе, объекты, операции, RU/EN UI и docs |
 | **Аутентификация** | Basic auth, cookie file, cookie string, optional header forwarding |
 | **Ограничение операций** | `--read-only`, `--read-only-but-functions`, `--enable`, `--disable` |
 | **Фильтрация инструментов** | `--entities`, `--functions`, `--tool-shrink`, custom prefix/postfix |
@@ -66,10 +68,11 @@
 
 Ключевые особенности:
 
-- **Dashboard-first сценарий**. HTTP-сервер может стартовать вообще без `--service`, а активная SAP-система выбирается потом через web UI.
-- **Горячее переключение системы**. При смене активного подключения bridge пересобирает MCP tools без перезапуска процесса.
-- **Персистентный реестр подключений**. Сохранённые профили лежат на диске и могут автоматически восстанавливаться после рестарта.
-- **Режим доступа на уровне профиля**. Для каждого SAP-подключения можно включать запись или принудительно оставлять только read-only инструменты.
+- **Dashboard-first сценарий**. HTTP-сервер может стартовать вообще без `--service`, а активная SAP-система и её OData сервисы выбираются потом через web UI.
+- **Иерархия SAP системы**. Одна система может содержать несколько сервисов: например `Materials.GET` через `MMIM_MATERIAL_DATA_SRV`, а `Materials.POST` через `API_PRODUCT_SRV`.
+- **Горячее переключение системы**. При смене активной системы bridge пересобирает MCP tools без перезапуска процесса.
+- **Персистентный реестр систем**. Сохранённые профили лежат на диске и могут автоматически восстанавливаться после рестарта.
+- **Режим доступа на уровне системы**. Для каждой SAP-системы можно включать запись или принудительно возвращать ошибку при попытке записи.
 - **Совместимость с большими SAP сервисами**. `--universal` резко снижает число инструментов и токеновую нагрузку на MCP-клиент.
 
 ---
@@ -91,8 +94,9 @@ MCP clients / AI assistants
 |  - Streamable HTTP                               |
 |                                                  |
 |  Dashboard layer (/dashboard)                    |
-|  - список SAP OData подключений                  |
-|  - connect / edit / switch / disconnect          |
+|  - SAP systems                                   |
+|  - service catalog per system                    |
+|  - business objects and operation bindings       |
 |  - RU/EN UI и документация                       |
 |                                                  |
 |  Bridge layer                                    |
@@ -102,8 +106,8 @@ MCP clients / AI assistants
 |  - hot reconfigure активной системы              |
 |                                                  |
 |  State file                                      |
-|  - active connection                             |
-|  - saved profiles                                |
+|  - active system                                 |
+|  - saved systems/services/objects/operations     |
 |  - access mode                                   |
 +--------------------------------------------------+
         |
@@ -118,6 +122,8 @@ MCP clients / AI assistants
 
 - открываете `http://localhost:8080/dashboard`
 - сохраняете несколько SAP-систем
+- добавляете OData сервисы внутри выбранной системы
+- создаёте бизнес-объекты и операции
 - выбираете активную
 - MCP-клиент работает через один и тот же `/mcp`
 
@@ -152,7 +158,7 @@ go build -o sap-odata-mcp-universal ./cmd/sap-odata-mcp-universal
 
 После старта:
 
-- dashboard: `http://localhost:8080/dashboard`
+- dashboard: `http://localhost:8080/dashboard?token=dev-token`
 - документация: `http://localhost:8080/dashboard/docs`
 - MCP endpoint: `http://localhost:8080/mcp`
 - health check: `http://localhost:8080/health`
@@ -160,10 +166,12 @@ go build -o sap-odata-mcp-universal ./cmd/sap-odata-mcp-universal
 Дальше:
 
 1. Откройте dashboard.
-2. Добавьте SAP OData подключение.
-3. Нажмите `Подключить`.
-4. Выберите его как активное.
-5. Подключите AI-клиент к `/mcp`.
+2. Если открыли dashboard без query-параметра, введите MCP token в модальном окне. UI хранит его только в `sessionStorage`.
+3. Создайте SAP систему: имя, base URL, client/mandant, логин и пароль.
+4. Добавьте OData сервисы в каталог системы.
+5. Создайте бизнес-объекты и операции `GET`, `LIST`, `POST`, `PATCH/PUT`, `DELETE`, привязав каждую операцию к нужному сервису и entity set.
+6. Сделайте систему активной.
+7. Подключите AI-клиент к `/mcp` с тем же bearer token.
 
 Важно: в HTTP-режиме токен обязателен даже на `localhost`.
 
@@ -340,40 +348,83 @@ Dashboard открывается на:
 - `GET /dashboard` — основной интерфейс
 - `GET /dashboard/docs` — встроенная подробная документация
 
-Он нужен для сценария, где один процесс обслуживает несколько SAP OData систем.
+Он нужен для сценария, где один процесс обслуживает несколько SAP систем, а внутри каждой системы может быть несколько OData service roots.
 
 Через UI можно:
 
-- сохранить несколько SAP OData профилей
-- подключить новый профиль и сразу сделать его активным
+- сохранить несколько SAP систем
+- добавить несколько OData сервисов в каталог выбранной системы
+- создать бизнес-объекты, например `Materials`
+- создать операции объекта и привязать их к конкретному сервису и entity set
+- проверить доступность всех сервисов системы кнопкой `Проверить`
+- обновить metadata конкретного сервиса
 - переключить активную систему без рестарта процесса
-- отредактировать профиль
-- удалить профиль
+- отредактировать систему, сервис, объект или операцию через модальное окно
+- удалить систему, сервис, объект или операцию
 - переключить язык интерфейса `RU/EN`
 
 Dashboard запускается в стиле `postgres-mcp-universal`:
 
-- слева список сохранённых подключений
-- справа форма нового или редактируемого подключения
+- слева дерево `System → Object → Operation` и кнопки управления
+- справа форма добавления новой системы, объекта или операции
+- редактирование существующих элементов открывается отдельным модальным окном
 - сверху переключение языка, документация и refresh
 - UI не подставляет логин/пароль по умолчанию
+- пароль при редактировании не возвращается из API; UI показывает `••••••••`, если пароль уже сохранён, и не затирает его при пустом поле
 
-### Поля подключения
+### Модель dashboard
+
+| Уровень | Что хранит | Пример |
+|---|---|---|
+| `System` | SAP landscape, client/mandant, логин, пароль, режим записи | `S4D`, client `100` |
+| `Service Catalog` | OData service roots внутри системы | `MMIM_MATERIAL_DATA_SRV`, `API_PRODUCT_SRV` |
+| `Object` | бизнес-объект, понятный пользователю и AI-клиенту | `Materials` |
+| `Operation` | конкретный MCP tool binding | `GET MaterialHeaders`, `POST A_Product` |
+
+Практический SAP-сценарий:
+
+```text
+System: S4D / client 100
+Services:
+  materials-read  -> http://host/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/
+  products-write  -> http://host/sap/opu/odata/sap/API_PRODUCT_SRV/
+Object:
+  Materials
+Operations:
+  GET    -> materials-read  / MaterialHeaders
+  LIST   -> materials-read  / MaterialHeaders
+  POST   -> products-write / A_Product
+  PATCH  -> products-write / A_Product
+```
+
+### Поля системы
 
 | Поле | Назначение |
 |---|---|
-| `Имя соединения` | внутреннее имя профиля в dashboard |
 | `Имя системы` | человекочитаемое имя SAP-ландшафта, например `S4HANA QA` |
-| `URL сервиса` | корневой SAP OData URL |
+| `Базовый URL SAP` | host SAP без конкретного OData сервиса, например `http://s4d.msgplaut.com:8000` |
 | `SAP клиент` | optional `sap-client`, добавляется в query string автоматически |
 | `Логин` | basic auth username |
 | `Пароль` | basic auth password |
-| `Разрешить запись` | включает write-capable инструменты, если metadata это допускает |
+| `Разрешить запись` | разрешает выполнение write operations в runtime |
 
-Пример URL:
+### Поля сервиса
+
+| Поле | Назначение |
+|---|---|
+| `Имя сервиса` | локальное имя сервиса внутри системы, например `materials-read` |
+| `URL сервиса` | полный OData service root, например `http://host/sap/opu/odata/sap/API_PRODUCT_SRV/` |
+
+URL сервиса должен указывать на корень сервиса, без entity set и без конкретного ключа. Например, из рабочего URL:
 
 ```text
-https://host/sap/opu/odata/sap/API_SALES_ORDER_SRV/
+http://s4d.msgplaut.com:8000/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialHeaders('1')?$format=json
+```
+
+в dashboard надо занести:
+
+```text
+http://s4d.msgplaut.com:8000/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/
 ```
 
 ### Режимы доступа
@@ -383,7 +434,7 @@ Dashboard хранит режим доступа на уровне профил�
 - `restricted` — принудительный read-only
 - `unrestricted` — разрешает операции записи, если SAP metadata помечает их как доступные
 
-Если вы выключаете запись в UI, bridge скрывает модифицирующие MCP tools даже при поддержке со стороны сервиса.
+Если вы выключаете запись в UI, mutating tools остаются видимыми для AI-клиента, но runtime возвращает явную ошибку при попытке записи. Это позволяет переключать write policy без жёсткой перезагрузки и пересборки всего сервера.
 
 ### Хранение состояния
 
@@ -398,8 +449,9 @@ Dashboard хранит режим доступа на уровне профил�
 В state file хранятся:
 
 - активное подключение
-- список сохранённых SAP OData профилей
-- режим доступа каждого профиля
+- список сохранённых SAP систем
+- сервисы, объекты и операции
+- режим доступа каждой системы
 - логины и пароли для автопереподключения после рестарта
 
 Пароли в state file **не шифруются**. Это сознательное эксплуатационное ограничение текущей реализации.
@@ -412,16 +464,25 @@ Dashboard хранит режим доступа на уровне профил�
 |---|---|---|
 | `/dashboard` | `GET` | UI dashboard |
 | `/dashboard/docs` | `GET` | встроенная документация |
-| `/api/status` | `GET` | статус активного подключения |
-| `/api/databases` | `GET` | список сохранённых подключений |
-| `/api/connect` | `POST` | создать и сразу активировать подключение |
-| `/api/edit` | `POST` | изменить сохранённое подключение |
-| `/api/switch` | `POST` | переключить активную систему |
-| `/api/disconnect` | `POST` | удалить подключение |
+| `/api/status` | `GET` | статус активной системы и счётчики |
+| `/api/systems` | `GET` | дерево систем, сервисов, объектов и операций |
+| `/api/system/test` | `POST` | проверить все сервисы системы |
+| `/api/system/save` | `POST` | создать или изменить систему |
+| `/api/system/delete` | `POST` | удалить систему |
+| `/api/system/activate` | `POST` | сделать систему активной |
+| `/api/service/save` | `POST` | создать или изменить сервис |
+| `/api/service/delete` | `POST` | удалить сервис |
+| `/api/service/discover` | `GET` | загрузить metadata сервиса и entity sets |
+| `/api/entity/save` | `POST` | создать или изменить объект; имя endpoint сохранено для совместимости |
+| `/api/entity/delete` | `POST` | удалить объект; имя endpoint сохранено для совместимости |
+| `/api/operation/save` | `POST` | создать или изменить операцию |
+| `/api/operation/delete` | `POST` | удалить операцию |
 | `/health` | `GET` | health endpoint |
 | `/mcp` | `POST` | MCP transport endpoint в `streamable-http` |
 
 Root `/` редиректит на `/dashboard`.
+
+Если сервер запущен с `--mcp-token`, маршруты `/api/*`, `/mcp`, `/rpc` и `/sse` требуют token на каждом запросе. Dashboard принимает token через модальное окно или query-параметр `?token=...` и дальше отправляет его как `Authorization: Bearer ...`.
 
 ---
 
@@ -592,7 +653,8 @@ Smoke-check HTTP режима:
 
 curl http://localhost:8080/health
 curl http://localhost:8080/dashboard
-curl http://localhost:8080/api/status
+curl -H 'Authorization: Bearer dev-token' http://localhost:8080/api/status
+curl -H 'Authorization: Bearer dev-token' http://localhost:8080/api/systems
 ```
 
 ---
@@ -618,7 +680,7 @@ curl http://localhost:8080/api/status
 - доступность metadata endpoint
 - нужен ли `sap-client`
 
-3. **Инструменты записи не появились**
+3. **Запись возвращает ошибку**
 
 Причины:
 
@@ -641,6 +703,16 @@ curl http://localhost:8080/api/status
 - правильный `/mcp` URL
 - совпадает ли token
 - умеет ли клиент передавать token для HTTP MCP
+
+6. **Dashboard показывает запрос MCP token**
+
+Это ожидаемо, если сервер запущен с `--mcp-token`. Откройте:
+
+```text
+http://localhost:8080/dashboard?token=dev-token
+```
+
+или введите token в модальном окне. UI сохранит его только в `sessionStorage` текущей вкладки.
 
 Для дополнительной диагностики используйте:
 

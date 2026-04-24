@@ -23,6 +23,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/systems", s.handleSystems)
+	mux.HandleFunc("/api/system/test", s.handleTestSystem)
 	mux.HandleFunc("/api/system/save", s.handleSaveSystem)
 	mux.HandleFunc("/api/system/delete", s.handleDeleteSystem)
 	mux.HandleFunc("/api/system/activate", s.handleActivateSystem)
@@ -105,6 +106,24 @@ func (s *Server) handleSystems(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 
+func (s *Server) handleTestSystem(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req models.DashboardActivationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+	result, err := s.provider.TestSystem(r.Context(), req.SystemID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (s *Server) handleSaveSystem(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -120,7 +139,7 @@ func (s *Server) handleSaveSystem(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	writeMutationJSON(w, result)
 }
 
 func (s *Server) handleDeleteSystem(w http.ResponseWriter, r *http.Request) {
@@ -138,7 +157,7 @@ func (s *Server) handleDeleteSystem(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	writeMutationJSON(w, result)
 }
 
 func (s *Server) handleActivateSystem(w http.ResponseWriter, r *http.Request) {
@@ -156,7 +175,7 @@ func (s *Server) handleActivateSystem(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	writeMutationJSON(w, result)
 }
 
 func (s *Server) handleSaveService(w http.ResponseWriter, r *http.Request) {
@@ -174,7 +193,7 @@ func (s *Server) handleSaveService(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	writeMutationJSON(w, result)
 }
 
 func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
@@ -192,7 +211,7 @@ func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	writeMutationJSON(w, result)
 }
 
 func (s *Server) handleDiscoverService(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +248,7 @@ func (s *Server) handleSaveEntity(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	writeMutationJSON(w, result)
 }
 
 func (s *Server) handleDeleteEntity(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +266,7 @@ func (s *Server) handleDeleteEntity(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	writeMutationJSON(w, result)
 }
 
 func (s *Server) handleSaveOperation(w http.ResponseWriter, r *http.Request) {
@@ -265,7 +284,7 @@ func (s *Server) handleSaveOperation(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	writeMutationJSON(w, result)
 }
 
 func (s *Server) handleDeleteOperation(w http.ResponseWriter, r *http.Request) {
@@ -283,11 +302,23 @@ func (s *Server) handleDeleteOperation(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	writeMutationJSON(w, result)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+func writeMutationJSON(w http.ResponseWriter, result *models.DashboardMutationResult) {
+	if result == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "empty mutation result"})
+		return
+	}
+	if !result.OK {
+		writeJSON(w, http.StatusBadRequest, result)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }

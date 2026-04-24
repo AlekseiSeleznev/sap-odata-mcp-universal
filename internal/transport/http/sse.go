@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +22,7 @@ type SSETransport struct {
 	mu             sync.RWMutex
 	messages       chan *clientMessage
 	routeRegistrar RouteRegistrar
+	token          string
 }
 
 type sseClient struct {
@@ -37,12 +39,13 @@ type clientMessage struct {
 }
 
 // NewSSE creates a new SSE transport
-func NewSSE(addr string, handler transport.Handler) *SSETransport {
+func NewSSE(addr string, handler transport.Handler, token string) *SSETransport {
 	return &SSETransport{
 		addr:     addr,
 		handler:  handler,
 		clients:  make(map[string]*sseClient),
 		messages: make(chan *clientMessage, 100),
+		token:    token,
 	}
 }
 
@@ -75,7 +78,7 @@ func (t *SSETransport) Start(ctx context.Context) error {
 
 	t.server = &http.Server{
 		Addr:    t.addr,
-		Handler: mux,
+		Handler: t.withSecurity(mux),
 	}
 
 	// Start message processor
@@ -90,6 +93,34 @@ func (t *SSETransport) Start(ctx context.Context) error {
 
 	<-ctx.Done()
 	return t.Close()
+}
+
+func (t *SSETransport) withSecurity(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		if isLocalhost(r.Host) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, X-MCP-Token, Content-Type, Accept, Last-Event-ID")
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if t.requiresAuth(r.URL.Path) && !ValidateRequestToken(r, t.token) {
+			WriteUnauthorized(w)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (t *SSETransport) requiresAuth(path string) bool {
+	if t.token == "" {
+		return false
+	}
+	return path == "/sse" || path == "/rpc" || strings.HasPrefix(path, "/api/")
 }
 
 // handleSSE handles SSE connections

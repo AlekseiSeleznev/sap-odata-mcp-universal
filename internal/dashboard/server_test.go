@@ -30,14 +30,15 @@ func (fakeProvider) Status(ctx context.Context) (*models.DashboardHierarchyStatu
 func (fakeProvider) Systems(ctx context.Context) ([]models.DashboardSystem, error) {
 	return []models.DashboardSystem{
 		{
-			ID:         "s4d-100",
-			Name:       "S4D",
-			BaseURL:    "http://s4d.msgplaut.com:8000",
-			Client:     "100",
-			Username:   "demo",
-			AccessMode: "unrestricted",
-			Connected:  true,
-			Active:     true,
+			ID:          "s4d-100",
+			Name:        "S4D",
+			BaseURL:     "http://s4d.msgplaut.com:8000",
+			Client:      "100",
+			Username:    "demo",
+			HasPassword: true,
+			AccessMode:  "unrestricted",
+			Connected:   true,
+			Active:      true,
 			Services: []models.DashboardService{
 				{ID: "materials-read", Name: "materials-read", ServiceURL: "http://host/MMIM_MATERIAL_DATA_SRV/", SafeServiceURL: "http://host/MMIM_MATERIAL_DATA_SRV/"},
 			},
@@ -50,6 +51,17 @@ func (fakeProvider) Systems(ctx context.Context) ([]models.DashboardSystem, erro
 					},
 				},
 			},
+		},
+	}, nil
+}
+func (fakeProvider) TestSystem(ctx context.Context, id string) (*models.DashboardSystemTestResult, error) {
+	return &models.DashboardSystemTestResult{
+		OK:         true,
+		Message:    "connection to S4D verified (1/1 services)",
+		SystemID:   "s4d-100",
+		SystemName: "S4D",
+		Services: []models.DashboardServiceTestResult{
+			{ServiceID: "materials-read", ServiceName: "materials-read", OK: true, ServiceURL: "http://host/MMIM_MATERIAL_DATA_SRV/"},
 		},
 	}, nil
 }
@@ -130,7 +142,7 @@ func TestDashboardRoutes(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 for dashboard, got %d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "sap-odata-mcp-universal") || !strings.Contains(rec.Body.String(), "Системы и сущности") {
+	if !strings.Contains(rec.Body.String(), "sap-odata-mcp-universal") || !strings.Contains(rec.Body.String(), "Системы и объекты") {
 		t.Fatalf("dashboard page missing expected content")
 	}
 
@@ -166,6 +178,7 @@ func TestDashboardRoutes(t *testing.T) {
 		path string
 		body string
 	}{
+		{"/api/system/test", `{"system_id":"s4d-100"}`},
 		{"/api/system/save", `{"name":"S4D","username":"demo","password":"secret","access_mode":"unrestricted"}`},
 		{"/api/system/activate", `{"system_id":"s4d-100"}`},
 		{"/api/service/save", `{"system_id":"s4d-100","name":"read","service_url":"http://host/service/"}`},

@@ -24,7 +24,7 @@ type StreamableHTTPTransport struct {
 	handler        transport.Handler
 	mu             sync.RWMutex
 	activeStreams  map[string]*streamContext
-	enableSecurity bool
+	token          string
 	forwardHeaders bool // Whether to forward HTTP headers to OData client
 	routeRegistrar RouteRegistrar
 }
@@ -41,12 +41,12 @@ type streamContext struct {
 }
 
 // NewStreamableHTTP creates a new Streamable HTTP transport
-func NewStreamableHTTP(addr string, handler transport.Handler, enableSecurity bool, forwardHeaders bool) *StreamableHTTPTransport {
+func NewStreamableHTTP(addr string, handler transport.Handler, token string, forwardHeaders bool) *StreamableHTTPTransport {
 	return &StreamableHTTPTransport{
 		addr:           addr,
 		handler:        handler,
 		activeStreams:  make(map[string]*streamContext),
-		enableSecurity: enableSecurity,
+		token:          token,
 		forwardHeaders: forwardHeaders,
 	}
 }
@@ -106,7 +106,7 @@ func (t *StreamableHTTPTransport) Start(ctx context.Context) error {
 func (t *StreamableHTTPTransport) addSecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Security check for non-localhost connections
-		if !t.enableSecurity && !isLocalhost(r.RemoteAddr) && !isLocalhost(r.Host) {
+		if t.token == "" && !isLocalhost(r.RemoteAddr) && !isLocalhost(r.Host) {
 			http.Error(w, "Remote connections require --mcp-token with --tls and --allow-all-interfaces", http.StatusForbidden)
 			return
 		}
@@ -119,16 +119,27 @@ func (t *StreamableHTTPTransport) addSecurityHeaders(next http.Handler) http.Han
 		if isLocalhost(r.Host) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept, Last-Event-ID")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, X-MCP-Token, Content-Type, Accept, Last-Event-ID")
 		}
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		if t.requiresAuth(r.URL.Path) && !ValidateRequestToken(r, t.token) {
+			WriteUnauthorized(w)
+			return
+		}
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (t *StreamableHTTPTransport) requiresAuth(path string) bool {
+	if t.token == "" {
+		return false
+	}
+	return path == "/mcp" || path == "/sse" || strings.HasPrefix(path, "/api/")
 }
 
 // handleMCP handles the main MCP endpoint with automatic SSE upgrade

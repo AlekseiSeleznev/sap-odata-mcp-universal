@@ -320,7 +320,7 @@ func runBridge(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		streamableTransport := http.NewStreamableHTTP(securityCfg.Addr, handler, securityCfg.Token != "", cfg.ForwardMCPHeaders)
+		streamableTransport := http.NewStreamableHTTP(securityCfg.Addr, handler, securityCfg.Token, cfg.ForwardMCPHeaders)
 		streamableTransport.SetRouteRegistrar(dashboard.New(dashboardProvider).RegisterRoutes)
 		trans = streamableTransport
 	case "http", "sse":
@@ -343,7 +343,7 @@ func runBridge(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		sseTransport := http.NewSSE(securityCfg.Addr, handler)
+		sseTransport := http.NewSSE(securityCfg.Addr, handler, securityCfg.Token)
 		sseTransport.SetRouteRegistrar(dashboard.New(dashboardProvider).RegisterRoutes)
 		trans = sseTransport
 

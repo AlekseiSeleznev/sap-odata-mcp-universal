@@ -30,6 +30,7 @@ type HierarchicalRuntime struct {
 	metadataCache map[string]*models.ODataMetadata
 	toolNames     map[string]string
 	activeSystem  string
+	activeAccess  string
 	mu            sync.Mutex
 }
 
@@ -58,14 +59,14 @@ func (r *HierarchicalRuntime) Clear() error {
 	r.clientCache = make(map[string]*client.ODataClient)
 	r.metadataCache = make(map[string]*models.ODataMetadata)
 	r.activeSystem = ""
+	r.activeAccess = ""
 	return nil
 }
 
-func (r *HierarchicalRuntime) ApplySystem(system SystemInfo) error {
+func (r *HierarchicalRuntime) ApplySystem(ctx context.Context, system SystemInfo) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	if err := r.bridge.ApplyConfig(config.Config{}); err != nil {
+		r.mu.Unlock()
 		return err
 	}
 
@@ -78,15 +79,13 @@ func (r *HierarchicalRuntime) ApplySystem(system SystemInfo) error {
 	r.clientCache = make(map[string]*client.ODataClient)
 	r.metadataCache = make(map[string]*models.ODataMetadata)
 	r.activeSystem = system.ID
+	r.activeAccess = normalizeAccessMode(system.AccessMode)
+	r.mu.Unlock()
 
 	usedNames := make(map[string]struct{})
 	for _, entity := range system.Entities {
 		for _, op := range entity.Operations {
 			if !op.Enabled {
-				continue
-			}
-			verb := normalizeVerb(op.Verb)
-			if system.AccessMode == "restricted" && isMutatingVerb(verb) {
 				continue
 			}
 
@@ -95,7 +94,7 @@ func (r *HierarchicalRuntime) ApplySystem(system SystemInfo) error {
 				continue
 			}
 
-			meta, err := r.metadataFor(system, service)
+			meta, err := r.metadataFor(ctx, system, service)
 			if err != nil {
 				return err
 			}
@@ -111,25 +110,34 @@ func (r *HierarchicalRuntime) ApplySystem(system SystemInfo) error {
 			}
 
 			toolName := makeToolName(system, entity, op, usedNames)
+			r.mu.Lock()
 			server.AddTool(r.buildTool(toolName, system, entity, op, entitySet, entityType), r.buildHandler(system, service, op, entityType))
 			r.registered = append(r.registered, toolName)
 			r.toolNames[operationKey(entity.ID, op.ID)] = toolName
+			r.mu.Unlock()
 		}
 	}
 
 	return nil
 }
 
-func (r *HierarchicalRuntime) Discover(system SystemInfo, serviceID string) (*models.DashboardServiceDiscovery, error) {
+func (r *HierarchicalRuntime) SetActiveAccessMode(systemID, accessMode string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.activeSystem != systemID {
+		return false
+	}
+	r.activeAccess = normalizeAccessMode(accessMode)
+	return true
+}
 
+func (r *HierarchicalRuntime) Discover(ctx context.Context, system SystemInfo, serviceID string) (*models.DashboardServiceDiscovery, error) {
 	service, ok := findService(system.Services, serviceID)
 	if !ok {
 		return nil, fmt.Errorf("service %q not found", serviceID)
 	}
 
-	meta, err := r.metadataFor(system, service)
+	meta, err := r.metadataFor(ctx, system, service)
 	if err != nil {
 		return nil, err
 	}
@@ -190,16 +198,24 @@ func (r *HierarchicalRuntime) ToolName(entityID, operationID string) string {
 	return r.toolNames[operationKey(entityID, operationID)]
 }
 
-func (r *HierarchicalRuntime) metadataFor(system SystemInfo, service ServiceInfo) (*models.ODataMetadata, error) {
+func (r *HierarchicalRuntime) metadataFor(ctx context.Context, system SystemInfo, service ServiceInfo) (*models.ODataMetadata, error) {
 	key := cacheKey(system, service)
+	r.mu.Lock()
 	if meta, ok := r.metadataCache[key]; ok {
+		r.mu.Unlock()
 		return meta, nil
 	}
+	r.mu.Unlock()
 
 	client := r.clientFor(system, service)
-	meta, err := client.GetMetadata(context.Background())
+	meta, err := client.GetMetadata(ctx)
 	if err != nil {
 		return nil, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if cached, ok := r.metadataCache[key]; ok {
+		return cached, nil
 	}
 	r.metadataCache[key] = meta
 	return meta, nil
@@ -207,14 +223,22 @@ func (r *HierarchicalRuntime) metadataFor(system SystemInfo, service ServiceInfo
 
 func (r *HierarchicalRuntime) clientFor(system SystemInfo, service ServiceInfo) *client.ODataClient {
 	key := cacheKey(system, service)
+	r.mu.Lock()
 	if cached, ok := r.clientCache[key]; ok {
+		r.mu.Unlock()
 		return cached
 	}
+	r.mu.Unlock()
 
 	serviceURL := normalizeServiceURL(service.ServiceURL, system.Client)
 	c := client.NewODataClient(serviceURL, r.baseConfig.Verbose)
 	if system.Username != "" || system.Password != "" {
 		c.SetBasicAuth(system.Username, system.Password)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if cached, ok := r.clientCache[key]; ok {
+		return cached
 	}
 	r.clientCache[key] = c
 	return c
@@ -281,8 +305,12 @@ func (r *HierarchicalRuntime) buildTool(toolName string, system SystemInfo, enti
 
 func (r *HierarchicalRuntime) buildHandler(system SystemInfo, service ServiceInfo, op OperationInfo, entityType *models.EntityType) mcp.ToolHandler {
 	return func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+		verb := normalizeVerb(op.Verb)
+		if isMutatingVerb(verb) && r.currentAccessMode(system.ID) == "restricted" {
+			return nil, fmt.Errorf("write operations are not allowed while system %q is in restricted mode", system.Name)
+		}
 		client := r.clientFor(system, service)
-		switch normalizeVerb(op.Verb) {
+		switch verb {
 		case "list":
 			resp, err := client.GetEntitySet(ctx, op.EntitySet, queryOptions(args))
 			return marshalResponse(resp, err)
@@ -323,6 +351,15 @@ func (r *HierarchicalRuntime) buildHandler(system SystemInfo, service ServiceInf
 			return nil, fmt.Errorf("unsupported operation verb %q", op.Verb)
 		}
 	}
+}
+
+func (r *HierarchicalRuntime) currentAccessMode(systemID string) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.activeSystem == systemID && r.activeAccess != "" {
+		return r.activeAccess
+	}
+	return "unrestricted"
 }
 
 func cacheKey(system SystemInfo, service ServiceInfo) string {
