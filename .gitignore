@@ -26,6 +26,11 @@ node_modules/
 node_modules/*
 coverage/
 coverage/*
+test-reports/
+test-reports/*
+__pycache__/
+__pycache__/*
+*.pyc
 .vscode/
 .vscode/*
 .idea/
