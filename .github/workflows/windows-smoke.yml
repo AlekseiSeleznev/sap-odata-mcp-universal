@@ -1,0 +1,23 @@
+name: Windows PowerShell Smoke
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  pwsh-smoke:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Run PowerShell MCP smoke
+        shell: pwsh
+        run: ./tests/smoke/mcp-smoke.ps1
