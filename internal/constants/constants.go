@@ -151,7 +151,7 @@ const (
 // Default values
 const (
 	DefaultUserAgent         = "sap-odata-mcp-universal/1.0 (Go)"
-	DefaultTimeout           = 30               // seconds
+	DefaultTimeout           = 60               // seconds
 	DefaultMaxResponseSize   = 10 * 1024 * 1024 // 10MB
 	DefaultMaxItems          = 1000
 	DefaultToolNameMaxLength = 64
