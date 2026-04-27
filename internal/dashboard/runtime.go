@@ -472,14 +472,14 @@ func findProperty(entityType *models.EntityType, name string) *models.EntityProp
 }
 
 func makeToolName(system SystemInfo, entity EntityInfo, op OperationInfo, used map[string]struct{}) string {
-	base := slugify(entity.ID)
+	base := toolNamePart(entity.ID)
 	if base == "" {
-		base = slugify(entity.Label)
+		base = toolNamePart(entity.Label)
 	}
 	if base == "" {
 		base = "entity"
 	}
-	base = base + "_" + normalizeVerb(op.Verb) + "_for_" + slugify(system.ID)
+	base = base + "_" + normalizeVerb(op.Verb) + "_for_" + toolNamePart(system.ID)
 	if _, exists := used[base]; !exists {
 		used[base] = struct{}{}
 		return base
@@ -491,6 +491,10 @@ func makeToolName(system SystemInfo, entity EntityInfo, op OperationInfo, used m
 			return candidate
 		}
 	}
+}
+
+func toolNamePart(raw string) string {
+	return strings.ReplaceAll(slugify(raw), "-", "_")
 }
 
 func toolDescription(system SystemInfo, entity EntityInfo, op OperationInfo, entitySet *models.EntitySet) string {
