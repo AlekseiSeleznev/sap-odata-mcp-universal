@@ -130,10 +130,12 @@ func (p *BridgeProvider) Systems(ctx context.Context) ([]models.DashboardSystem,
 				service, _ := findService(system.Services, op.ServiceID)
 				entityItem.Operations = append(entityItem.Operations, models.DashboardOperation{
 					ID:          op.ID,
+					Name:        operationDisplayName(op),
 					Verb:        normalizeVerb(op.Verb),
 					ServiceID:   op.ServiceID,
 					ServiceName: service.Name,
 					EntitySet:   op.EntitySet,
+					Query:       copyQueryOptions(op.Query),
 					ToolName:    p.runtime.ToolName(entity.ID, op.ID),
 					Mode:        normalizeMode(op.Mode),
 					Enabled:     op.Enabled,
@@ -770,9 +772,11 @@ func entityFromRequest(system SystemInfo, req models.DashboardEntityUpsertReques
 func (p *BridgeProvider) operationFromRequest(ctx context.Context, system SystemInfo, entity EntityInfo, req models.DashboardOperationUpsertRequest) (OperationInfo, error) {
 	op := OperationInfo{
 		ID:        strings.TrimSpace(req.ID),
+		Name:      strings.TrimSpace(req.Name),
 		Verb:      normalizeVerb(req.Verb),
 		ServiceID: strings.TrimSpace(req.ServiceID),
 		EntitySet: strings.TrimSpace(req.EntitySet),
+		Query:     normalizeOperationQuery(req.Query),
 		Mode:      normalizeMode(req.Mode),
 		Enabled:   req.Enabled,
 	}
@@ -790,8 +794,15 @@ func (p *BridgeProvider) operationFromRequest(ctx context.Context, system System
 	if _, ok := findService(system.Services, op.ServiceID); !ok {
 		return OperationInfo{}, fmt.Errorf("service %q not found", op.ServiceID)
 	}
+	if op.Name == "" {
+		op.Name = defaultOperationName(op)
+	}
 	if op.ID == "" {
-		op.ID = ensureUniqueID(entity.ID+"-"+op.Verb, func(id string) bool {
+		idSource := entity.ID + "-" + op.Verb + "-" + op.EntitySet
+		if strings.TrimSpace(req.Name) != "" {
+			idSource = entity.ID + "-" + req.Name
+		}
+		op.ID = ensureUniqueID(idSource, func(id string) bool {
 			for _, item := range entity.Operations {
 				if item.ID == id {
 					return true
@@ -807,8 +818,8 @@ func (p *BridgeProvider) operationFromRequest(ctx context.Context, system System
 		if item.ID == op.ID {
 			return OperationInfo{}, fmt.Errorf("operation id %q already exists", op.ID)
 		}
-		if normalizeVerb(item.Verb) == op.Verb {
-			return OperationInfo{}, fmt.Errorf("operation %q already exists for this object", op.Verb)
+		if sameOperationBinding(item, op) {
+			return OperationInfo{}, fmt.Errorf("operation binding %q/%s already exists for this object", op.Verb, op.EntitySet)
 		}
 	}
 
@@ -827,6 +838,80 @@ func (p *BridgeProvider) operationFromRequest(ctx context.Context, system System
 		return OperationInfo{}, fmt.Errorf("entity set %q not found in selected service", op.EntitySet)
 	}
 	return op, nil
+}
+
+func defaultOperationName(op OperationInfo) string {
+	verb := strings.ToUpper(normalizeVerb(op.Verb))
+	if verb == "LIST" {
+		verb = "GET list"
+	}
+	if strings.TrimSpace(op.EntitySet) == "" {
+		return verb
+	}
+	return verb + " " + op.EntitySet
+}
+
+func operationDisplayName(op OperationInfo) string {
+	if strings.TrimSpace(op.Name) != "" {
+		return strings.TrimSpace(op.Name)
+	}
+	return defaultOperationName(op)
+}
+
+func normalizeOperationQuery(raw map[string]string) map[string]string {
+	if len(raw) == 0 {
+		return nil
+	}
+	allowed := map[string]string{
+		"$expand":  "$expand",
+		"expand":   "$expand",
+		"$select":  "$select",
+		"select":   "$select",
+		"$filter":  "$filter",
+		"filter":   "$filter",
+		"$orderby": "$orderby",
+		"orderby":  "$orderby",
+		"$top":     "$top",
+		"top":      "$top",
+		"$skip":    "$skip",
+		"skip":     "$skip",
+		"$count":   "$count",
+		"count":    "$count",
+	}
+	query := make(map[string]string)
+	for key, value := range raw {
+		normalized, ok := allowed[strings.ToLower(strings.TrimSpace(key))]
+		if !ok {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		query[normalized] = value
+	}
+	if len(query) == 0 {
+		return nil
+	}
+	return query
+}
+
+func copyQueryOptions(raw map[string]string) map[string]string {
+	if len(raw) == 0 {
+		return nil
+	}
+	copy := make(map[string]string, len(raw))
+	for key, value := range raw {
+		copy[key] = value
+	}
+	return copy
+}
+
+func sameOperationBinding(left, right OperationInfo) bool {
+	return normalizeVerb(left.Verb) == normalizeVerb(right.Verb) &&
+		left.ServiceID == right.ServiceID &&
+		left.EntitySet == right.EntitySet &&
+		reflect.DeepEqual(normalizeOperationQuery(left.Query), normalizeOperationQuery(right.Query))
 }
 
 func findSystemIndex(systems []SystemInfo, id string) (SystemInfo, int) {

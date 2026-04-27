@@ -47,9 +47,15 @@ var dashboardTranslations = map[string]map[string]string{
 		"service_url":       "URL сервиса",
 		"entity_label":      "Имя объекта",
 		"entity_desc":       "Описание",
-		"op_verb":           "Метод",
+		"op_name":           "Имя операции",
+		"op_verb":           "Тип операции",
 		"op_service":        "Сервис",
 		"op_entityset":      "Entity Set",
+		"op_query_expand":   "По умолчанию $expand",
+		"op_query_select":   "По умолчанию $select",
+		"op_query_filter":   "По умолчанию $filter",
+		"op_query_orderby":  "По умолчанию $orderby",
+		"op_query_top":      "По умолчанию $top",
 		"active":            "Активна",
 		"connected":         "Подключена",
 		"disconnected":      "Неактивна",
@@ -78,8 +84,8 @@ var dashboardTranslations = map[string]map[string]string{
 		"btn_forget_token":  "Сбросить токен",
 		"msg_discovery":     "Метаданные обновлены",
 		"confirm_delete":    "Подтвердите удаление",
-		"verb_get":          "GET",
-		"verb_list":         "LIST",
+		"verb_get":          "GET запись",
+		"verb_list":         "GET список",
 		"verb_create":       "POST",
 		"verb_update":       "PATCH/PUT",
 		"verb_delete":       "DELETE",
@@ -129,9 +135,15 @@ var dashboardTranslations = map[string]map[string]string{
 		"service_url":       "Service URL",
 		"entity_label":      "Object name",
 		"entity_desc":       "Description",
-		"op_verb":           "Method",
+		"op_name":           "Operation name",
+		"op_verb":           "Operation type",
 		"op_service":        "Service",
 		"op_entityset":      "Entity set",
+		"op_query_expand":   "Default $expand",
+		"op_query_select":   "Default $select",
+		"op_query_filter":   "Default $filter",
+		"op_query_orderby":  "Default $orderby",
+		"op_query_top":      "Default $top",
 		"active":            "Active",
 		"connected":         "Connected",
 		"disconnected":      "Inactive",
@@ -160,8 +172,8 @@ var dashboardTranslations = map[string]map[string]string{
 		"btn_forget_token":  "Forget token",
 		"msg_discovery":     "Metadata refreshed",
 		"confirm_delete":    "Confirm deletion",
-		"verb_get":          "GET",
-		"verb_list":         "LIST",
+		"verb_get":          "GET single",
+		"verb_list":         "GET list",
 		"verb_create":       "POST",
 		"verb_update":       "PATCH/PUT",
 		"verb_delete":       "DELETE",
@@ -502,8 +514,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .entity-desc{font-size:.72rem;color:#94a3b8;margin-top:2px}
 .op-mini{margin-top:6px;padding:7px 8px;border:1px solid #334155;border-radius:6px;background:#111827}
 .op-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.op-query{margin-top:5px;display:flex;gap:5px;flex-wrap:wrap}
 .badge{display:inline-flex;align-items:center;padding:1px 6px;border-radius:3px;font-size:.62rem;font-weight:600}
 .badge-g{background:rgba(34,197,94,.12);color:#22c55e}.badge-r{background:rgba(239,68,68,.12);color:#ef4444}.badge-b{background:rgba(59,130,246,.12);color:#3b82f6}.badge-c{background:#164e63;color:#22d3ee}
+.badge-q{background:rgba(14,165,233,.12);color:#7dd3fc;border:1px solid rgba(125,211,252,.16);font-family:'SF Mono','Cascadia Code',monospace}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.form-group{display:flex;flex-direction:column;gap:3px}.form-group.full{grid-column:1/-1}
 .form-group label{font-size:.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
 input,select,textarea{padding:5px 8px;border-radius:4px;border:1px solid #475569;background:#0f172a;color:#e2e8f0;font-size:.8rem;transition:border .15s;width:100%}
@@ -673,6 +687,52 @@ function opLabel(verb) {
   const found = VERBS.find(x => x.value === verb);
   return found ? found.label : verb.toUpperCase();
 }
+function operationTitle(op) {
+  return op && op.name ? op.name : (op ? (opLabel(op.verb) + ' ' + op.entity_set) : '');
+}
+function suggestOperationName(verb, entitySet) {
+  const label = opLabel(verb || 'list');
+  return (label + (entitySet ? ' ' + entitySet : '')).trim();
+}
+function operationQueryBadges(query) {
+  query = query || {};
+  const keys = ['$expand', '$select', '$filter', '$orderby', '$top', '$skip', '$count'];
+  const items = [];
+  for (const key of keys) {
+    if (query[key]) items.push('<span class="badge badge-q">' + esc(key + '=' + query[key]) + '</span>');
+  }
+  return items.length ? '<div class="op-query">' + items.join('') + '</div>' : '';
+}
+function fillOperationQuery(prefix, query) {
+  query = query || {};
+  const fields = {
+    '$expand': 'expand',
+    '$select': 'select',
+    '$filter': 'filter',
+    '$orderby': 'orderby',
+    '$top': 'top'
+  };
+  for (const key in fields) {
+    const el = document.getElementById(prefix + fields[key]);
+    if (el) el.value = query[key] || '';
+  }
+}
+function collectOperationQuery(prefix) {
+  const fields = [
+    ['$expand', 'expand'],
+    ['$select', 'select'],
+    ['$filter', 'filter'],
+    ['$orderby', 'orderby'],
+    ['$top', 'top']
+  ];
+  const query = {};
+  for (const pair of fields) {
+    const el = document.getElementById(prefix + pair[1]);
+    const value = el ? el.value.trim() : '';
+    if (value) query[pair[0]] = value;
+  }
+  return query;
+}
 function systemDetails(sys) {
   const parts = [];
   if (sys.base_url) parts.push(sys.base_url);
@@ -718,7 +778,7 @@ function renderTree() {
       '<span class="badge ' + (sys.access_mode === 'unrestricted' ? 'badge-b' : 'badge-c') + '">' + modeLabel(sys.access_mode) + '</span>'
     ].join(' ');
     const entities = sys.entities.length ? sys.entities.map(ent => {
-      const ops = ent.operations.length ? ent.operations.map(op => '<div class="op-mini"><div class="op-row"><div onclick="selectOperation(\'' + esc(op.id) + '\')" style="flex:1;cursor:pointer"><strong>' + opLabel(op.verb) + '</strong> <span style="color:#94a3b8">' + esc(op.entity_set) + '</span></div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' + (op.tool_name ? '<span class="badge badge-c">' + esc(op.tool_name) + '</span>' : '') + '<button class="btn btn-s" onclick="openOperationEditModal(\'' + esc(ent.id) + '\', \'' + esc(op.id) + '\')">' + T.btn_edit + '</button><button class="btn btn-s btn-d" onclick="deleteOperationFromTree(\'' + esc(ent.id) + '\', \'' + esc(op.id) + '\')">' + T.btn_delete + '</button></div></div></div>').join('') : '<div class="hint">' + T.empty_ops + '</div>';
+      const ops = ent.operations.length ? ent.operations.map(op => '<div class="op-mini"><div class="op-row"><div onclick="selectOperation(\'' + esc(op.id) + '\')" style="flex:1;cursor:pointer"><strong>' + esc(operationTitle(op)) + '</strong> <span style="color:#94a3b8">' + esc(opLabel(op.verb)) + ' · ' + esc(op.entity_set) + '</span></div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' + (op.tool_name ? '<span class="badge badge-c">' + esc(op.tool_name) + '</span>' : '') + '<button class="btn btn-s" onclick="openOperationEditModal(\'' + esc(ent.id) + '\', \'' + esc(op.id) + '\')">' + T.btn_edit + '</button><button class="btn btn-s btn-d" onclick="deleteOperationFromTree(\'' + esc(ent.id) + '\', \'' + esc(op.id) + '\')">' + T.btn_delete + '</button></div></div>' + operationQueryBadges(op.query) + '</div>').join('') : '<div class="hint">' + T.empty_ops + '</div>';
       return '<div class="entity-node">' +
         '<div class="entity-head"><div onclick="selectEntity(\'' + esc(ent.id) + '\')" style="flex:1;cursor:pointer"><div class="entity-title">' + esc(ent.label) + '</div><div class="entity-desc">' + esc(ent.description || '') + '</div></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-s" onclick="newOperationForEntity(\'' + esc(ent.id) + '\')">' + T.btn_new_op + '</button><button class="btn btn-s" onclick="openEntityEditModal(\'' + esc(ent.id) + '\')">' + T.btn_edit + '</button><button class="btn btn-s btn-d" onclick="deleteEntityFromTree(\'' + esc(ent.id) + '\')">' + T.btn_delete + '</button></div></div>' +
         ops + '</div>';
@@ -780,9 +840,15 @@ function renderObjectEditorTemplate() {
 function renderOperationEditorTemplate() {
   return '<h2>' + (state.editor.mode === 'create' ? T.btn_new_op : T.h_operation) + '</h2>' +
     '<div class="form-grid">' +
+      '<div class="form-group full"><label>' + T.op_name + '</label><input id="op-name"></div>' +
       '<div class="form-group"><label>' + T.op_verb + '</label><select id="op-verb"></select></div>' +
       '<div class="form-group"><label>' + T.op_service + '</label><select id="op-service"></select></div>' +
       '<div class="form-group full"><label>' + T.op_entityset + '</label><select id="op-entityset"></select></div>' +
+      '<div class="form-group"><label>' + T.op_query_expand + '</label><input id="op-query-expand" placeholder="ToDescription"></div>' +
+      '<div class="form-group"><label>' + T.op_query_select + '</label><input id="op-query-select" placeholder="MATNR,ToDescription"></div>' +
+      '<div class="form-group"><label>' + T.op_query_filter + '</label><input id="op-query-filter"></div>' +
+      '<div class="form-group"><label>' + T.op_query_orderby + '</label><input id="op-query-orderby"></div>' +
+      '<div class="form-group"><label>' + T.op_query_top + '</label><input id="op-query-top" type="number" min="0"></div>' +
     '</div>' +
     '<div id="discovery" class="hint">' + T.discovery_hint + '</div>' +
     '<div class="form-actions">' +
@@ -812,6 +878,7 @@ function renderOperationForm() {
   if (!document.getElementById('op-verb')) return;
   const sys = activeSystem(); const ent = activeEntity(); const op = activeOperation();
   const verbSel = document.getElementById('op-verb');
+  const nameInput = document.getElementById('op-name');
   verbSel.innerHTML = VERBS.map(v => '<option value="' + v.value + '">' + v.label + '</option>').join('');
   const serviceSel = document.getElementById('op-service');
   if (!sys) {
@@ -821,10 +888,13 @@ function renderOperationForm() {
   }
   serviceSel.innerHTML = '<option value="">' + T.select_service + '</option>' + sys.services.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('');
   if (op) {
+    nameInput.value = op.name || '';
     verbSel.value = op.verb;
     serviceSel.value = op.service_id;
+    fillOperationQuery('op-query-', op.query);
   } else if (sys.services[0]) {
     serviceSel.value = sys.services[0].id;
+    fillOperationQuery('op-query-', {});
   }
   if (serviceSel.value && !state.discovery[state.selectedSystemId + '::' + serviceSel.value]) {
     discoverService(state.selectedSystemId, serviceSel.value).then(() => renderOperationForm());
@@ -834,7 +904,11 @@ function renderOperationForm() {
     if (!state.discovery[currentSys.id + '::' + this.value]) await discoverService(currentSys.id, this.value);
     populateEntitySetOptions(this.value, '');
   };
+  verbSel.onchange = function() {
+    nameInput.placeholder = suggestOperationName(this.value, document.getElementById('op-entityset').value);
+  };
   populateEntitySetOptions(serviceSel.value, op ? op.entity_set : '');
+  nameInput.placeholder = suggestOperationName(verbSel.value, document.getElementById('op-entityset').value);
 }
 function populateEntitySetOptions(serviceId, selected) {
   const sel = document.getElementById('op-entityset');
@@ -844,6 +918,11 @@ function populateEntitySetOptions(serviceId, selected) {
   if (!serviceId) { sel.innerHTML = '<option value="">' + T.select_service + '</option>'; return; }
   sel.innerHTML = '<option value="">' + T.select_entityset + '</option>' + options.map(x => '<option value="' + esc(x.name) + '">' + esc(x.name) + '</option>').join('');
   if (selected) sel.value = selected;
+  sel.onchange = function() {
+    const nameInput = document.getElementById('op-name');
+    const verbSel = document.getElementById('op-verb');
+    if (nameInput && verbSel) nameInput.placeholder = suggestOperationName(verbSel.value, this.value);
+  };
   document.getElementById('discovery').innerHTML = options.length ? '<strong>' + T.discovery_sets + ':</strong> ' + options.map(x => esc(x.name)).join(', ') : T.discovery_hint;
 }
 function selectSystem(id) { state.selectedSystemId = id; state.selectedEntityId = ''; state.selectedOperationId = ''; state.editingServiceId = ''; syncSelection(); renderAll(); }
@@ -1051,9 +1130,15 @@ async function openOperationEditModal(entityId, operationId) {
     '<div class="modal">' +
       '<h3>' + T.h_edit_operation + '</h3>' +
       '<div class="form-grid">' +
+        '<div class="form-group full"><label>' + T.op_name + '</label><input id="m-op-name" value="' + escAttr(op.name || '') + '"></div>' +
         '<div class="form-group"><label>' + T.op_verb + '</label><select id="m-op-verb">' + VERBS.map(v => '<option value="' + v.value + '"' + (v.value === op.verb ? ' selected' : '') + '>' + v.label + '</option>').join('') + '</select></div>' +
         '<div class="form-group"><label>' + T.op_service + '</label><select id="m-op-service" onchange="changeOperationModalService()">' + buildServiceOptions(sys, op.service_id) + '</select></div>' +
         '<div class="form-group full"><label>' + T.op_entityset + '</label><select id="m-op-entityset"></select></div>' +
+        '<div class="form-group"><label>' + T.op_query_expand + '</label><input id="m-op-query-expand" placeholder="ToDescription"></div>' +
+        '<div class="form-group"><label>' + T.op_query_select + '</label><input id="m-op-query-select"></div>' +
+        '<div class="form-group"><label>' + T.op_query_filter + '</label><input id="m-op-query-filter"></div>' +
+        '<div class="form-group"><label>' + T.op_query_orderby + '</label><input id="m-op-query-orderby"></div>' +
+        '<div class="form-group"><label>' + T.op_query_top + '</label><input id="m-op-query-top" type="number" min="0"></div>' +
       '</div>' +
       '<div id="m-op-discovery" class="hint">' + T.discovery_hint + '</div>' +
       '<div class="modal-actions">' +
@@ -1063,6 +1148,7 @@ async function openOperationEditModal(entityId, operationId) {
     '</div>'
   );
   populateOperationModalEntitySets(sys.id, op.service_id, op.entity_set);
+  fillOperationQuery('m-op-query-', op.query);
 }
 async function changeOperationModalService() {
   const sys = activeSystem(); if (!sys) return;
@@ -1084,7 +1170,7 @@ function populateOperationModalEntitySets(systemId, serviceId, selected) {
 }
 async function saveOperationModal(oldId) {
   const sys = activeSystem(); const ent = activeEntity(); if (!sys || !ent) return toast(T.select_entity, true);
-  const payload = {system_id: sys.id, entity_id: ent.id, old_id: oldId, verb: document.getElementById('m-op-verb').value, service_id: document.getElementById('m-op-service').value, entity_set: document.getElementById('m-op-entityset').value, mode: 'generated', enabled: true};
+  const payload = {system_id: sys.id, entity_id: ent.id, old_id: oldId, id: oldId, name: document.getElementById('m-op-name').value.trim(), verb: document.getElementById('m-op-verb').value, service_id: document.getElementById('m-op-service').value, entity_set: document.getElementById('m-op-entityset').value, query: collectOperationQuery('m-op-query-'), mode: 'generated', enabled: true};
   const r = await api('/api/operation/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
   if (!r || r.error || r.ok === false) return toast(T.msg_error + ': ' + ((r && (r.error || r.message)) || 'unknown'), true);
   closeOverlay();
@@ -1160,7 +1246,7 @@ async function deleteEntity() {
 async function saveOperation() {
   const sys = activeSystem(); const ent = activeEntity(); if (!sys || !ent) return toast(T.select_entity, true);
   const op = activeOperation();
-  const payload = {system_id: sys.id, entity_id: ent.id, old_id: op ? op.id : '', verb: document.getElementById('op-verb').value, service_id: document.getElementById('op-service').value, entity_set: document.getElementById('op-entityset').value, mode: 'generated', enabled: true};
+  const payload = {system_id: sys.id, entity_id: ent.id, old_id: op ? op.id : '', id: op ? op.id : '', name: document.getElementById('op-name').value.trim(), verb: document.getElementById('op-verb').value, service_id: document.getElementById('op-service').value, entity_set: document.getElementById('op-entityset').value, query: collectOperationQuery('op-query-'), mode: 'generated', enabled: true};
   const r = await api('/api/operation/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
   if (!r || r.error || r.ok === false) return toast(T.msg_error + ': ' + ((r && (r.error || r.message)) || 'unknown'), true);
   toast(T.msg_saved); await loadAll();

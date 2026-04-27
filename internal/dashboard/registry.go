@@ -29,12 +29,14 @@ func (s ServiceInfo) safeServiceURL() string {
 }
 
 type OperationInfo struct {
-	ID        string `json:"id"`
-	Verb      string `json:"verb"`
-	ServiceID string `json:"service_id"`
-	EntitySet string `json:"entity_set"`
-	Mode      string `json:"mode"`
-	Enabled   bool   `json:"enabled"`
+	ID        string            `json:"id"`
+	Name      string            `json:"name,omitempty"`
+	Verb      string            `json:"verb"`
+	ServiceID string            `json:"service_id"`
+	EntitySet string            `json:"entity_set"`
+	Query     map[string]string `json:"query,omitempty"`
+	Mode      string            `json:"mode"`
+	Enabled   bool              `json:"enabled"`
 }
 
 type EntityInfo struct {
@@ -243,10 +245,27 @@ func sortedEntities(items []EntityInfo) []EntityInfo {
 	})
 	for i := range copyItems {
 		sort.Slice(copyItems[i].Operations, func(a, b int) bool {
-			return operationRank(copyItems[i].Operations[a].Verb) < operationRank(copyItems[i].Operations[b].Verb)
+			left := copyItems[i].Operations[a]
+			right := copyItems[i].Operations[b]
+			leftRank := operationRank(left.Verb)
+			rightRank := operationRank(right.Verb)
+			if leftRank != rightRank {
+				return leftRank < rightRank
+			}
+			return strings.ToLower(operationSortLabel(left)) < strings.ToLower(operationSortLabel(right))
 		})
 	}
 	return copyItems
+}
+
+func operationSortLabel(op OperationInfo) string {
+	if strings.TrimSpace(op.Name) != "" {
+		return op.Name
+	}
+	if strings.TrimSpace(op.EntitySet) != "" {
+		return op.EntitySet
+	}
+	return op.ID
 }
 
 func operationRank(verb string) int {

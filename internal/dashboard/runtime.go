@@ -312,10 +312,10 @@ func (r *HierarchicalRuntime) buildHandler(system SystemInfo, service ServiceInf
 		client := r.clientFor(system, service)
 		switch verb {
 		case "list":
-			resp, err := client.GetEntitySet(ctx, op.EntitySet, queryOptions(args))
+			resp, err := client.GetEntitySet(ctx, op.EntitySet, operationQueryOptions(op, args))
 			return marshalResponse(resp, err)
 		case "get":
-			resp, err := client.GetEntity(ctx, op.EntitySet, buildKeyMap(entityType, args), queryOptions(args))
+			resp, err := client.GetEntity(ctx, op.EntitySet, buildKeyMap(entityType, args), operationQueryOptions(op, args))
 			return marshalResponse(resp, err)
 		case "create":
 			payload := stripSystemArgs(args)
@@ -383,6 +383,17 @@ func queryOptions(args map[string]interface{}) map[string]string {
 				options[key] = "true"
 			}
 		}
+	}
+	return options
+}
+
+func operationQueryOptions(op OperationInfo, args map[string]interface{}) map[string]string {
+	options := copyQueryOptions(op.Query)
+	if options == nil {
+		options = make(map[string]string)
+	}
+	for key, value := range queryOptions(args) {
+		options[key] = value
 	}
 	return options
 }
@@ -472,14 +483,28 @@ func findProperty(entityType *models.EntityType, name string) *models.EntityProp
 }
 
 func makeToolName(system SystemInfo, entity EntityInfo, op OperationInfo, used map[string]struct{}) string {
-	base := toolNamePart(entity.ID)
-	if base == "" {
-		base = toolNamePart(entity.Label)
+	entityPart := toolNamePart(entity.ID)
+	if entityPart == "" {
+		entityPart = toolNamePart(entity.Label)
 	}
-	if base == "" {
-		base = "entity"
+	if entityPart == "" {
+		entityPart = "entity"
 	}
-	base = base + "_" + normalizeVerb(op.Verb) + "_for_" + toolNamePart(system.ID)
+
+	opPart := toolNamePart(op.ID)
+	if opPart == "" {
+		opPart = toolNamePart(op.Name)
+	}
+	if opPart == "" {
+		opPart = toolNamePart(normalizeVerb(op.Verb) + "_" + op.EntitySet)
+	}
+	prefix := entityPart + "_"
+	opPart = strings.TrimPrefix(opPart, prefix)
+	if opPart == "" {
+		opPart = normalizeVerb(op.Verb)
+	}
+
+	base := entityPart + "_" + opPart + "_for_" + toolNamePart(system.ID)
 	if _, exists := used[base]; !exists {
 		used[base] = struct{}{}
 		return base
@@ -498,7 +523,11 @@ func toolNamePart(raw string) string {
 }
 
 func toolDescription(system SystemInfo, entity EntityInfo, op OperationInfo, entitySet *models.EntitySet) string {
-	return fmt.Sprintf("%s %s in system %s via %s", strings.Title(normalizeVerb(op.Verb)), entity.Label, system.Name, entitySet.Name)
+	name := strings.TrimSpace(op.Name)
+	if name == "" {
+		name = defaultOperationName(op)
+	}
+	return fmt.Sprintf("%s for %s in system %s via %s", name, entity.Label, system.Name, entitySet.Name)
 }
 
 func marshalResponse(resp *models.ODataResponse, err error) (interface{}, error) {

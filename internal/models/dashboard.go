@@ -10,14 +10,16 @@ type DashboardService struct {
 }
 
 type DashboardOperation struct {
-	ID          string `json:"id"`
-	Verb        string `json:"verb"`
-	ServiceID   string `json:"service_id"`
-	ServiceName string `json:"service_name,omitempty"`
-	EntitySet   string `json:"entity_set"`
-	ToolName    string `json:"tool_name,omitempty"`
-	Mode        string `json:"mode"`
-	Enabled     bool   `json:"enabled"`
+	ID          string            `json:"id"`
+	Name        string            `json:"name,omitempty"`
+	Verb        string            `json:"verb"`
+	ServiceID   string            `json:"service_id"`
+	ServiceName string            `json:"service_name,omitempty"`
+	EntitySet   string            `json:"entity_set"`
+	Query       map[string]string `json:"query,omitempty"`
+	ToolName    string            `json:"tool_name,omitempty"`
+	Mode        string            `json:"mode"`
+	Enabled     bool              `json:"enabled"`
 }
 
 type DashboardEntity struct {
@@ -71,15 +73,17 @@ type DashboardEntityUpsertRequest struct {
 }
 
 type DashboardOperationUpsertRequest struct {
-	SystemID  string `json:"system_id"`
-	EntityID  string `json:"entity_id"`
-	OldID     string `json:"old_id,omitempty"`
-	ID        string `json:"id,omitempty"`
-	Verb      string `json:"verb"`
-	ServiceID string `json:"service_id"`
-	EntitySet string `json:"entity_set"`
-	Mode      string `json:"mode"`
-	Enabled   bool   `json:"enabled"`
+	SystemID  string            `json:"system_id"`
+	EntityID  string            `json:"entity_id"`
+	OldID     string            `json:"old_id,omitempty"`
+	ID        string            `json:"id,omitempty"`
+	Name      string            `json:"name,omitempty"`
+	Verb      string            `json:"verb"`
+	ServiceID string            `json:"service_id"`
+	EntitySet string            `json:"entity_set"`
+	Query     map[string]string `json:"query,omitempty"`
+	Mode      string            `json:"mode"`
+	Enabled   bool              `json:"enabled"`
 }
 
 type DashboardDeleteRequest struct {
