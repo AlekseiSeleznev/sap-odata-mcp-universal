@@ -15,9 +15,10 @@ import (
 
 // Tool represents an MCP tool
 type Tool struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	InputSchema map[string]interface{} `json:"inputSchema"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description"`
+	InputSchema  map[string]interface{} `json:"inputSchema"`
+	OutputSchema map[string]interface{} `json:"outputSchema,omitempty"`
 }
 
 // ToolHandler is a function that handles tool execution
@@ -318,6 +319,7 @@ func (s *Server) handleToolsCallV2(req *Request) (*transport.Message, error) {
 
 	s.mu.RLock()
 	handler, exists := s.handlers[name]
+	tool := s.tools[name]
 	s.mu.RUnlock()
 
 	if !exists {
@@ -345,6 +347,17 @@ func (s *Server) handleToolsCallV2(req *Request) (*transport.Message, error) {
 				"text": result,
 			},
 		},
+	}
+	if tool != nil && tool.OutputSchema != nil {
+		encoded, marshalErr := json.Marshal(result)
+		if marshalErr != nil {
+			return s.createErrorResponse(req.ID, -32603, "Internal error", marshalErr.Error()), nil
+		}
+		response["content"] = []map[string]interface{}{{
+			"type": "text",
+			"text": string(encoded),
+		}}
+		response["structuredContent"] = result
 	}
 
 	return s.createResponse(req.ID, response)

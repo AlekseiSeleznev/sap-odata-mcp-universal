@@ -23,25 +23,29 @@ type runtimeBridge interface {
 }
 
 type HierarchicalRuntime struct {
-	bridge        runtimeBridge
-	baseConfig    config.Config
-	registered    []string
-	clientCache   map[string]*client.ODataClient
-	metadataCache map[string]*models.ODataMetadata
-	toolNames     map[string]string
-	activeSystem  string
-	activeAccess  string
-	mu            sync.Mutex
+	bridge           runtimeBridge
+	baseConfig       config.Config
+	registered       []string
+	clientCache      map[string]*client.ODataClient
+	metadataCache    map[string]*models.ODataMetadata
+	serviceCacheKeys map[string]string
+	toolNames        map[string]string
+	activeSystem     string
+	activeAccess     string
+	mu               sync.Mutex
 }
 
 func NewHierarchicalRuntime(odataBridge *bridge.ODataMCPBridge, baseConfig config.Config) *HierarchicalRuntime {
-	return &HierarchicalRuntime{
-		bridge:        odataBridge,
-		baseConfig:    baseConfig,
-		clientCache:   make(map[string]*client.ODataClient),
-		metadataCache: make(map[string]*models.ODataMetadata),
-		toolNames:     make(map[string]string),
+	runtime := &HierarchicalRuntime{
+		bridge:           odataBridge,
+		baseConfig:       baseConfig,
+		clientCache:      make(map[string]*client.ODataClient),
+		metadataCache:    make(map[string]*models.ODataMetadata),
+		serviceCacheKeys: make(map[string]string),
+		toolNames:        make(map[string]string),
 	}
+	runtime.registerCachedCSDLSummaryTool()
+	return runtime
 }
 
 func (r *HierarchicalRuntime) Clear() error {
@@ -58,6 +62,7 @@ func (r *HierarchicalRuntime) Clear() error {
 	r.toolNames = make(map[string]string)
 	r.clientCache = make(map[string]*client.ODataClient)
 	r.metadataCache = make(map[string]*models.ODataMetadata)
+	r.serviceCacheKeys = make(map[string]string)
 	r.activeSystem = ""
 	r.activeAccess = ""
 	return nil
@@ -78,6 +83,7 @@ func (r *HierarchicalRuntime) ApplySystem(ctx context.Context, system SystemInfo
 	r.toolNames = make(map[string]string)
 	r.clientCache = make(map[string]*client.ODataClient)
 	r.metadataCache = make(map[string]*models.ODataMetadata)
+	r.serviceCacheKeys = make(map[string]string)
 	r.activeSystem = system.ID
 	r.activeAccess = normalizeAccessMode(system.AccessMode)
 	r.mu.Unlock()
@@ -202,6 +208,7 @@ func (r *HierarchicalRuntime) metadataFor(ctx context.Context, system SystemInfo
 	key := cacheKey(system, service)
 	r.mu.Lock()
 	if meta, ok := r.metadataCache[key]; ok {
+		r.serviceCacheKeys[serviceBindingKey(system.ID, service.ID)] = key
 		r.mu.Unlock()
 		return meta, nil
 	}
@@ -215,9 +222,11 @@ func (r *HierarchicalRuntime) metadataFor(ctx context.Context, system SystemInfo
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if cached, ok := r.metadataCache[key]; ok {
+		r.serviceCacheKeys[serviceBindingKey(system.ID, service.ID)] = key
 		return cached, nil
 	}
 	r.metadataCache[key] = meta
+	r.serviceCacheKeys[serviceBindingKey(system.ID, service.ID)] = key
 	return meta, nil
 }
 

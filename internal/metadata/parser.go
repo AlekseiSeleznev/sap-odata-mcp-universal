@@ -197,10 +197,13 @@ func parseEntityType(et EntityType) *models.EntityType {
 	// Parse properties
 	for _, prop := range et.Properties {
 		property := &models.EntityProperty{
-			Name:     prop.Name,
-			Type:     prop.Type,
-			Nullable: prop.Nullable != "false", // Default to true if not specified
-			IsKey:    slices.Contains(entityType.KeyProperties, prop.Name),
+			Name:      prop.Name,
+			Type:      prop.Type,
+			Nullable:  prop.Nullable != "false", // Default to true if not specified
+			IsKey:     slices.Contains(entityType.KeyProperties, prop.Name),
+			MaxLength: prop.MaxLength,
+			Precision: prop.Precision,
+			Scale:     prop.Scale,
 		}
 		entityType.Properties = append(entityType.Properties, property)
 	}

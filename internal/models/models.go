@@ -12,6 +12,9 @@ type EntityProperty struct {
 	Type        string  `json:"type"` // OData type (e.g., "Edm.String")
 	Nullable    bool    `json:"nullable"`
 	IsKey       bool    `json:"is_key"`
+	MaxLength   string  `json:"max_length,omitempty"`
+	Precision   string  `json:"precision,omitempty"`
+	Scale       string  `json:"scale,omitempty"`
 	Description *string `json:"description,omitempty"`
 }
 

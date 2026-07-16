@@ -55,6 +55,10 @@ func TestParseMetadata_SingleSchema(t *testing.T) {
 	// Entity set keeps original reference (qualified name from metadata)
 	assert.Equal(t, "NorthwindModel.Product", result.EntitySets["Products"].EntityType)
 	assert.Equal(t, "NorthwindModel.Category", result.EntitySets["Categories"].EntityType)
+	productProperties := result.EntityTypes["NorthwindModel.Product"].Properties
+	assert.Equal(t, "40", productProperties[1].MaxLength)
+	assert.Equal(t, "19", productProperties[2].Precision)
+	assert.Equal(t, "4", productProperties[2].Scale)
 
 	// Namespace should be captured
 	assert.Equal(t, "NorthwindModel", result.SchemaNamespace)
@@ -230,7 +234,7 @@ func TestParseMetadata_V4_SearchRestrictions(t *testing.T) {
           <PropertyRef Name="ID"/>
         </Key>
         <Property Name="ID" Type="Edm.Int32" Nullable="false"/>
-        <Property Name="Name" Type="Edm.String"/>
+		<Property Name="Name" Type="Edm.String" MaxLength="80"/>
       </EntityType>
       <EntityType Name="Category">
         <Key>
@@ -263,6 +267,7 @@ func TestParseMetadata_V4_SearchRestrictions(t *testing.T) {
 
 	result, err := ParseMetadata([]byte(metadata), "http://example.com/odata")
 	require.NoError(t, err)
+	assert.Equal(t, "80", result.EntityTypes["Product"].Properties[1].MaxLength)
 
 	// Products should be searchable (annotation says true)
 	assert.True(t, result.EntitySets["Products"].Searchable, "Products should be searchable")
