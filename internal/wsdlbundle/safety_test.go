@@ -443,6 +443,10 @@ func TestParseXMLRejectsAmbiguousXSDDeclarations(t *testing.T) {
 		{"group name and ref", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:t" targetNamespace="urn:t"><xsd:group name="G"/><xsd:group name="Other" ref="tns:G"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
 		{"attribute group name and ref", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:t" targetNamespace="urn:t"><xsd:attributeGroup name="G"/><xsd:attributeGroup name="Other" ref="tns:G"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
 		{"attribute name and ref", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:t" targetNamespace="urn:t"><xsd:attribute name="A" type="xsd:string"/><xsd:attribute name="Other" ref="tns:A"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"complex type with type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:complexType name="T" type="xsd:string"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"simple type with type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:simpleType name="T" type="xsd:string"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"group with type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:group name="G" type="xsd:string"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"attribute group with type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:attributeGroup name="G" type="xsd:string"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
 		{"anonymous complex type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:element name="E"><xsd:complexType/></xsd:element></xsd:schema>`, "UNSUPPORTED_DIALECT"},
 	}
 	for _, tc := range tests {
@@ -452,6 +456,29 @@ func TestParseXMLRejectsAmbiguousXSDDeclarations(t *testing.T) {
 				t.Fatalf("parse stop = %+v, want %s", stopped, tc.code)
 			}
 		})
+	}
+}
+
+func TestMergeSimpleTypeRedefinitionRequiresExactSelfRestriction(t *testing.T) {
+	original := XSDComponent{Namespace: "urn:t", Name: "Code", Kind: "simpleType", Type: qname(xsdNamespace, "string"), TypeReferences: []string{qname(xsdNamespace, "string")}, Facets: []XSDFacet{{Name: "length", Value: "3"}}}
+	selfQName := qname("urn:t", "Code")
+	redefinition := XSDComponent{Namespace: "urn:t", Name: "Code", Kind: "simpleType", Type: selfQName, TypeReferences: []string{selfQName}, Facets: []XSDFacet{{Name: "pattern", Value: "[A-Z]{3}"}}, Redefines: true, RedefinitionRootQName: selfQName, Derivation: "restriction"}
+	merged, err := mergeSimpleTypeRedefinition(original, redefinition)
+	if err != nil {
+		t.Fatalf("merge valid self restriction: %v", err)
+	}
+	if merged.Type != qname(xsdNamespace, "string") || len(merged.Facets) != 2 || merged.Facets[0].Name != "length" || merged.Facets[1].Name != "pattern" {
+		t.Fatalf("effective simpleType evidence lost inherited constraints: %#v", merged)
+	}
+
+	invalid := []XSDComponent{redefinition, redefinition, redefinition}
+	invalid[0].Derivation = "list"
+	invalid[1].Type = qname(xsdNamespace, "string")
+	invalid[2].TypeReferences = append(invalid[2].TypeReferences, qname(xsdNamespace, "string"))
+	for index, candidate := range invalid {
+		if _, err := mergeSimpleTypeRedefinition(original, candidate); err == nil {
+			t.Fatalf("invalid redefine case %d was accepted: %#v", index, candidate)
+		}
 	}
 }
 

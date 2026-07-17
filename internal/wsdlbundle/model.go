@@ -157,6 +157,7 @@ type XSDComponent struct {
 	Redefines             bool       `json:"-"`
 	TypeReferences        []string   `json:"-"`
 	RedefinitionRootQName string     `json:"-"`
+	Derivation            string     `json:"-"`
 }
 
 type XSDFacet struct {

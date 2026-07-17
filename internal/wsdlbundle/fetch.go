@@ -557,7 +557,7 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 					name := attribute(value, "name")
 					rawRef := attribute(value, "ref")
 					rawType := attribute(value, "type")
-					if (name != "" && rawRef != "") || (rawRef != "" && rawType != "") || ((value.Name.Local == "complexType" || value.Name.Local == "simpleType") && rawRef != "") || ((value.Name.Local == "element" || value.Name.Local == "group" || value.Name.Local == "attributeGroup" || value.Name.Local == "attribute") && name == "" && rawRef == "") {
+					if (name != "" && rawRef != "") || (rawRef != "" && rawType != "") || ((value.Name.Local == "complexType" || value.Name.Local == "simpleType") && rawRef != "") || ((value.Name.Local == "complexType" || value.Name.Local == "simpleType" || value.Name.Local == "group" || value.Name.Local == "attributeGroup") && rawType != "") || ((value.Name.Local == "element" || value.Name.Local == "group" || value.Name.Local == "attributeGroup" || value.Name.Local == "attribute") && name == "" && rawRef == "") {
 						return parsed, stop("xml", "XSD_DECLARATION_INVALID", "XSD name, ref, and type attributes are inconsistent")
 					}
 					if (value.Name.Local == "complexType" || value.Name.Local == "simpleType") && name == "" {
@@ -610,6 +610,7 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 							}
 						}
 						component.TypeReferences = append(component.TypeReferences, references...)
+						component.Derivation = value.Name.Local
 						parsed.XSDComponents[index] = component
 					}
 				}
@@ -758,9 +759,17 @@ func buildContract(ctx context.Context, manifest Manifest, documents map[string]
 				if existingIsRedefinition == componentIsRedefinition {
 					return nil, stop("contract", "CONTRACT_CONFLICT", "XSD component definitions conflict")
 				}
-				if componentIsRedefinition {
-					componentIndex[componentKey] = component
+				original := existing
+				redefinition := component
+				if existingIsRedefinition {
+					original = component
+					redefinition = existing
 				}
+				merged, err := mergeSimpleTypeRedefinition(original, redefinition)
+				if err != nil {
+					return nil, stop("contract", "UNSUPPORTED_DIALECT", "simpleType redefine is not an exact self restriction")
+				}
+				componentIndex[componentKey] = merged
 				continue
 			}
 			componentIndex[componentKey] = component
@@ -922,6 +931,18 @@ func xsdComponentKey(component XSDComponent) string {
 		return component.Namespace + "\x00" + component.Kind + "\x00" + component.Name
 	}
 	return component.ParentQName + "\x00" + component.Kind + "\x00" + fmt.Sprintf("%08d", component.Order)
+}
+
+func mergeSimpleTypeRedefinition(original, redefinition XSDComponent) (XSDComponent, error) {
+	selfQName := qname(original.Namespace, original.Name)
+	if original.Kind != "simpleType" || redefinition.Kind != "simpleType" || !redefinition.Redefines || redefinition.Derivation != "restriction" || redefinition.Type != selfQName || len(redefinition.TypeReferences) != 1 || redefinition.TypeReferences[0] != selfQName || original.Type == "" {
+		return XSDComponent{}, fmt.Errorf("unsupported simpleType redefine")
+	}
+	merged := redefinition
+	merged.Type = original.Type
+	merged.TypeReferences = append([]string{}, original.TypeReferences...)
+	merged.Facets = append(append([]XSDFacet{}, original.Facets...), redefinition.Facets...)
+	return merged, nil
 }
 
 func resolveFetchURI(raw string, base *url.URL, manifest Manifest) (resolvedURI, error) {

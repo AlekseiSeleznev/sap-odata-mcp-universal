@@ -108,9 +108,10 @@ parts may live in separate documents. Duplicate WSDL or XSD definitions must be
 identical; conflicts hard-stop. XSD evidence retains parent, sequence order,
 cardinality, type, and facets.
 
-The evidence model resolves simple-type `xsd:redefine`. Complex/group
-redefinitions and anonymous XSD types fail closed as `UNSUPPORTED_DIALECT`
-instead of publishing an approximate contract.
+The evidence model resolves only the exact simple-type `xsd:redefine` form:
+`restriction` of the original self QName, with inherited and new facets retained.
+Complex/group, list/union/non-self redefinitions and anonymous XSD types fail
+closed as `UNSUPPORTED_DIALECT` instead of publishing an approximate contract.
 
 Only a complete sanitized bundle is atomically renamed into `evidence_dir`.
 Private origins are represented by keyed HMAC identifiers; raw XML, endpoints,
