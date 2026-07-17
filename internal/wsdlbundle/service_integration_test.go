@@ -338,6 +338,8 @@ func TestServiceFailsClosedOnAmbiguousAnonymousXSDTypeOwnership(t *testing.T) {
 		{"list names and inlines item type", `<xsd:element name="InvoiceRequest"><xsd:simpleType><xsd:list itemType="xsd:string"><xsd:simpleType><xsd:restriction base="xsd:string"/></xsd:simpleType></xsd:list></xsd:simpleType></xsd:element>`},
 		{"restriction names and inlines base type", `<xsd:element name="InvoiceRequest"><xsd:simpleType><xsd:restriction base="xsd:string"><xsd:simpleType><xsd:restriction base="xsd:string"/></xsd:simpleType></xsd:restriction></xsd:simpleType></xsd:element>`},
 		{"list has multiple inline item types", `<xsd:element name="InvoiceRequest"><xsd:simpleType><xsd:list><xsd:simpleType><xsd:restriction base="xsd:string"/></xsd:simpleType><xsd:simpleType><xsd:restriction base="xsd:string"/></xsd:simpleType></xsd:list></xsd:simpleType></xsd:element>`},
+		{"element inline type hidden under annotation", `<xsd:element name="InvoiceRequest"><xsd:annotation><xsd:simpleType><xsd:restriction base="xsd:string"/></xsd:simpleType></xsd:annotation></xsd:element>`},
+		{"union member type hidden under annotation", `<xsd:element name="InvoiceRequest"><xsd:simpleType><xsd:union><xsd:annotation><xsd:simpleType><xsd:restriction base="xsd:string"/></xsd:simpleType></xsd:annotation></xsd:union></xsd:simpleType></xsd:element>`},
 		{"invalid nillable lexical value", `<xsd:element name="InvoiceRequest" nillable="yes"/>`},
 	}
 	for _, tc := range tests {

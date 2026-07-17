@@ -365,6 +365,7 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 	var currentMessage string
 	var currentMessageDepth int
 	componentAtDepth := map[int]int{}
+	elementAtDepth := map[int]xml.Name{}
 	childOrder := map[int]int{}
 	nestedAnonymousCount := map[int]int{}
 	schemaTargetAtDepth := map[int]string{}
@@ -396,6 +397,7 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 			}
 		case xml.StartElement:
 			depth++
+			elementAtDepth[depth] = value.Name
 			if depth > limits.MaxXMLNesting {
 				return parsed, stop("limits", "XML_NESTING_LIMIT", "XML nesting limit exceeded")
 			}
@@ -591,8 +593,9 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 							invalidPlacement = true
 						} else {
 							parent := parsed.XSDComponents[parentIndex]
-							inlineOwner := parent.Kind == "element" || (parent.Kind == "attribute" && value.Name.Local == "simpleType")
-							nestedSimpleOwner := value.Name.Local == "simpleType" && parent.Kind == "simpleType" && (parent.Derivation == "restriction" || parent.Derivation == "list" || parent.Derivation == "union")
+							immediateParent := elementAtDepth[depth-1]
+							inlineOwner := immediateParent.Space == xsdNamespace && immediateParent.Local == parent.Kind && (parent.Kind == "element" || (parent.Kind == "attribute" && value.Name.Local == "simpleType"))
+							nestedSimpleOwner := immediateParent.Space == xsdNamespace && immediateParent.Local == parent.Derivation && value.Name.Local == "simpleType" && parent.Kind == "simpleType" && (parent.Derivation == "restriction" || parent.Derivation == "list" || parent.Derivation == "union")
 							if !inlineOwner && !nestedSimpleOwner {
 								invalidPlacement = true
 							} else if inlineOwner && (parent.Type != "" || parent.RefQName != "" || parent.InlineTypeID != "") {
@@ -736,6 +739,7 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 				redefineDepth = 0
 			}
 			delete(componentAtDepth, depth)
+			delete(elementAtDepth, depth)
 			delete(schemaTargetAtDepth, depth)
 			delete(schemaElementFormAtDepth, depth)
 			delete(schemaAttributeFormAtDepth, depth)
