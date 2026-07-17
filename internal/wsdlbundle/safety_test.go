@@ -447,6 +447,12 @@ func TestParseXMLRejectsAmbiguousXSDDeclarations(t *testing.T) {
 		{"simple type with type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:simpleType name="T" type="xsd:string"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
 		{"group with type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:group name="G" type="xsd:string"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
 		{"attribute group with type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:attributeGroup name="G" type="xsd:string"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"global element ref", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:t" targetNamespace="urn:t"><xsd:element name="E" type="xsd:string"/><xsd:element ref="tns:E"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"global group ref", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:t" targetNamespace="urn:t"><xsd:group name="G"/><xsd:group ref="tns:G"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"global attribute group ref", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:t" targetNamespace="urn:t"><xsd:attributeGroup name="G"/><xsd:attributeGroup ref="tns:G"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"named local complex type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:element name="E"><xsd:complexType name="T"/></xsd:element></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"named local simple type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:element name="E"><xsd:simpleType name="T"><xsd:restriction base="xsd:string"/></xsd:simpleType></xsd:element></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"named local group", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:complexType name="T"><xsd:group name="G"/></xsd:complexType></xsd:schema>`, "XSD_DECLARATION_INVALID"},
 		{"anonymous complex type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:element name="E"><xsd:complexType/></xsd:element></xsd:schema>`, "UNSUPPORTED_DIALECT"},
 	}
 	for _, tc := range tests {

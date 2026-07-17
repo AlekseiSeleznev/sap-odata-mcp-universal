@@ -557,7 +557,19 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 					name := attribute(value, "name")
 					rawRef := attribute(value, "ref")
 					rawType := attribute(value, "type")
-					if (name != "" && rawRef != "") || (rawRef != "" && rawType != "") || ((value.Name.Local == "complexType" || value.Name.Local == "simpleType") && rawRef != "") || ((value.Name.Local == "complexType" || value.Name.Local == "simpleType" || value.Name.Local == "group" || value.Name.Local == "attributeGroup") && rawType != "") || ((value.Name.Local == "element" || value.Name.Local == "group" || value.Name.Local == "attributeGroup" || value.Name.Local == "attribute") && name == "" && rawRef == "") {
+					schemaDepth := nearestDepth(schemaTargetAtDepth, depth)
+					directRedefinition := redefineDepth > 0 && depth == redefineDepth+1
+					globalDeclaration := depth == schemaDepth+1 || directRedefinition
+					invalidPlacement := globalDeclaration && rawRef != ""
+					if !globalDeclaration {
+						switch value.Name.Local {
+						case "complexType", "simpleType":
+							invalidPlacement = name != ""
+						case "group", "attributeGroup":
+							invalidPlacement = name != "" || rawRef == ""
+						}
+					}
+					if invalidPlacement || (name != "" && rawRef != "") || (rawRef != "" && rawType != "") || ((value.Name.Local == "complexType" || value.Name.Local == "simpleType") && rawRef != "") || ((value.Name.Local == "complexType" || value.Name.Local == "simpleType" || value.Name.Local == "group" || value.Name.Local == "attributeGroup") && rawType != "") || ((value.Name.Local == "element" || value.Name.Local == "group" || value.Name.Local == "attributeGroup" || value.Name.Local == "attribute") && name == "" && rawRef == "") {
 						return parsed, stop("xml", "XSD_DECLARATION_INVALID", "XSD name, ref, and type attributes are inconsistent")
 					}
 					if (value.Name.Local == "complexType" || value.Name.Local == "simpleType") && name == "" {
@@ -577,7 +589,6 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 							order = childOrder[parentIndex]
 						}
 						schemaTarget, _ := nearestString(schemaTargetAtDepth, depth)
-						directRedefinition := redefineDepth > 0 && depth == redefineDepth+1
 						redefinitionRoot := ""
 						if directRedefinition {
 							redefinitionRoot = qname(schemaTarget, name)
@@ -1193,6 +1204,15 @@ func nearestString(active map[int]string, depth int) (string, bool) {
 		}
 	}
 	return value, bestDepth >= 0
+}
+func nearestDepth(active map[int]string, depth int) int {
+	bestDepth := -1
+	for candidateDepth := range active {
+		if candidateDepth <= depth && candidateDepth > bestDepth {
+			bestDepth = candidateDepth
+		}
+	}
+	return bestDepth
 }
 func isXSDComponentKind(local string) bool {
 	switch local {
