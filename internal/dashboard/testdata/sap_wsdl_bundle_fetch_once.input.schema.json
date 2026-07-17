@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "system_id": {"type": "string", "const": "gpi_100"},
+    "contract_id": {"type": "string", "const": "employee-shop-invoice-wsdl"},
+    "request_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "permit_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}
+  },
+  "required": ["system_id", "contract_id", "request_manifest_sha256", "permit_id"],
+  "additionalProperties": false
+}

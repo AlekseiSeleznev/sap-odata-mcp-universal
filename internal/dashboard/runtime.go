@@ -45,6 +45,7 @@ func NewHierarchicalRuntime(odataBridge *bridge.ODataMCPBridge, baseConfig confi
 		toolNames:        make(map[string]string),
 	}
 	runtime.registerCachedCSDLSummaryTool()
+	runtime.registerWSDLBundleFetchTool()
 	return runtime
 }
 

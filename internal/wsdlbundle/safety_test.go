@@ -1,0 +1,334 @@
+package wsdlbundle
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"sync/atomic"
+	"testing"
+)
+
+func TestServiceStopsBeforePermitAndTransportOnManifestMismatch(t *testing.T) {
+	ledger := &fixtureLedger{}
+	var transportFactories atomic.Int32
+	service, input := fixtureService(t, ledger, func(context.Context, Manifest) (http.RoundTripper, error) {
+		transportFactories.Add(1)
+		return roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, fmt.Errorf("must not run") }), nil
+	}, nil)
+	args := inputArgs(input)
+	args["request_manifest_sha256"] = strings.Repeat("0", 64)
+	result, err := service.Fetch(context.Background(), args)
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	assertHardStop(t, result, "MANIFEST_MISMATCH", false, 0)
+	if ledger.calls.Load() != 0 || transportFactories.Load() != 0 {
+		t.Fatalf("pre-manifest rejection touched permit or transport: ledger=%d transport=%d", ledger.calls.Load(), transportFactories.Load())
+	}
+}
+
+func TestServiceStopsBeforeTransportOnPermitMismatch(t *testing.T) {
+	ledger := &fixtureLedger{err: fmt.Errorf("PERMIT_MISMATCH")}
+	var transportFactories atomic.Int32
+	service, input := fixtureService(t, ledger, func(context.Context, Manifest) (http.RoundTripper, error) {
+		transportFactories.Add(1)
+		return nil, fmt.Errorf("must not run")
+	}, nil)
+	result, err := service.Fetch(context.Background(), inputArgs(input))
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	assertHardStop(t, result, "PERMIT_MISMATCH", false, 0)
+	if ledger.calls.Load() != 1 || transportFactories.Load() != 0 {
+		t.Fatalf("permit rejection touched transport: ledger=%d transport=%d", ledger.calls.Load(), transportFactories.Load())
+	}
+}
+
+func TestServiceNeverRetriesRedirectAuthMediaOrTransportFailures(t *testing.T) {
+	tests := []struct {
+		name      string
+		code      string
+		roundTrip func(*http.Request) (*http.Response, error)
+	}{
+		{"redirect", "HTTP_REDIRECT", responseRoundTrip(http.StatusFound, "application/xml", `<x/>`)},
+		{"unauthorized", "AUTH_FAILURE", responseRoundTrip(http.StatusUnauthorized, "application/xml", `<x/>`)},
+		{"forbidden", "AUTH_FAILURE", responseRoundTrip(http.StatusForbidden, "application/xml", `<x/>`)},
+		{"login html", "MEDIA_TYPE_INVALID", responseRoundTrip(http.StatusOK, "text/html", `<html>login</html>`)},
+		{"connection reset", "NETWORK_ERROR", func(*http.Request) (*http.Response, error) { return nil, fmt.Errorf("fixture reset") }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls atomic.Int32
+			service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+				return roundTripFunc(func(req *http.Request) (*http.Response, error) { calls.Add(1); return tc.roundTrip(req) }), nil
+			}, nil)
+			result, err := service.Fetch(context.Background(), inputArgs(input))
+			if err != nil {
+				t.Fatalf("fetch: %v", err)
+			}
+			assertHardStop(t, result, tc.code, true, 1)
+			if calls.Load() != 1 {
+				t.Fatalf("transport attempted %d times, want exactly one", calls.Load())
+			}
+		})
+	}
+}
+
+func TestServiceRejectsUnsafeXMLDialectsAndCrossOriginReferences(t *testing.T) {
+	tests := []struct{ name, code, body string }{
+		{"doctype", "XML_UNSAFE", `<!DOCTYPE definitions [<!ENTITY x "boom">]><wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"/>`},
+		{"xinclude", "XML_UNSAFE", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="local.xml"/></wsdl:definitions>`},
+		{"wsdl 2", "UNSUPPORTED_DIALECT", `<description xmlns="http://www.w3.org/ns/wsdl"/>`},
+		{"cross origin", "URI_POLICY_VIOLATION", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:x" location="https://other.invalid/private.wsdl"/></wsdl:definitions>`},
+		{"missing import", "REFERENCE_MISSING", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:x"/></wsdl:definitions>`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls atomic.Int32
+			service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+				return roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					calls.Add(1)
+					return responseRoundTrip(http.StatusOK, "application/xml", tc.body)(req)
+				}), nil
+			}, nil)
+			result, err := service.Fetch(context.Background(), inputArgs(input))
+			if err != nil {
+				t.Fatalf("fetch: %v", err)
+			}
+			assertHardStop(t, result, tc.code, true, 1)
+			if calls.Load() != 1 {
+				t.Fatalf("transport attempted %d times", calls.Load())
+			}
+		})
+	}
+}
+
+func TestServiceEnforcesXMLAndClosureLimitsWithoutPartialEvidence(t *testing.T) {
+	tests := []struct {
+		name   string
+		code   string
+		adjust func(*Limits)
+		body   string
+	}{
+		{"document bytes", "DOCUMENT_SIZE_LIMIT", func(l *Limits) { l.MaxDocumentBytes = 32; l.MaxTotalBytes = 64 }, strings.Repeat("x", 33)},
+		{"xml tokens", "XML_TOKEN_LIMIT", func(l *Limits) { l.MaxXMLTokens = 2 }, `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:message name="x"/></wsdl:definitions>`},
+		{"xml nesting", "XML_NESTING_LIMIT", func(l *Limits) { l.MaxXMLNesting = 2 }, `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:types><wsdl:documentation/></wsdl:types></wsdl:definitions>`},
+		{"attribute count", "XML_ATTRIBUTE_LIMIT", func(l *Limits) { l.MaxAttributes = 1 }, `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" name="x" targetNamespace="urn:x"/>`},
+		{"attribute bytes", "XML_ATTRIBUTE_SIZE_LIMIT", func(l *Limits) { l.MaxAttributeBytes = 3 }, `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" name="long"/>`},
+		{"reference count", "REFERENCE_LIMIT", func(l *Limits) { l.MaxReferences = 1 }, `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:a" location="/a.wsdl"/><wsdl:import namespace="urn:b" location="/b.wsdl"/></wsdl:definitions>`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			limits := ProductionLimits()
+			tc.adjust(&limits)
+			service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+				return roundTripFunc(responseRoundTrip(http.StatusOK, "application/xml", tc.body)), nil
+			}, &limits)
+			result, err := service.Fetch(context.Background(), inputArgs(input))
+			if err != nil {
+				t.Fatalf("fetch: %v", err)
+			}
+			assertHardStop(t, result, tc.code, true, 1)
+			if result.Bundle != nil || result.EvidenceManifestSHA256 != nil {
+				t.Fatal("limit failure published partial evidence")
+			}
+		})
+	}
+}
+
+func TestServiceEnforcesDocumentDepthTotalAndEvidenceLimits(t *testing.T) {
+	tests := []struct {
+		name, code string
+		adjust     func(*Limits)
+	}{
+		{"documents", "DOCUMENT_LIMIT", func(l *Limits) { l.MaxDocuments = 1 }},
+		{"depth", "DEPTH_LIMIT", func(l *Limits) { l.MaxDepth = 1 }},
+		{"total bytes", "TOTAL_SIZE_LIMIT", func(l *Limits) { l.MaxDocumentBytes = 600; l.MaxTotalBytes = 700 }},
+		{"evidence bytes", "ATOMIC_PUBLISH_FAILED", func(l *Limits) { l.MaxEvidenceBytes = 1 }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			limits := ProductionLimits()
+			tc.adjust(&limits)
+			var calls atomic.Int32
+			service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+				return roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					calls.Add(1)
+					body := minimalWSDL()
+					switch tc.name {
+					case "documents":
+						body = `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:a" location="/a.wsdl"/></wsdl:definitions>`
+					case "depth":
+						if strings.HasSuffix(req.URL.Path, "invoice.wsdl") {
+							body = `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:a" location="/a.wsdl"/></wsdl:definitions>`
+						} else {
+							body = `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:b" location="/b.wsdl"/></wsdl:definitions>`
+						}
+					case "total bytes":
+						if strings.HasSuffix(req.URL.Path, "invoice.wsdl") {
+							body = `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:a" location="/a.wsdl"/>` + strings.Repeat(" ", 350) + `</wsdl:definitions>`
+						} else {
+							body = `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">` + strings.Repeat(" ", 350) + `</wsdl:definitions>`
+						}
+					}
+					return responseRoundTrip(http.StatusOK, "application/xml", body)(req)
+				}), nil
+			}, &limits)
+			result, err := service.Fetch(context.Background(), inputArgs(input))
+			if err != nil {
+				t.Fatalf("fetch: %v", err)
+			}
+			assertHardStop(t, result, tc.code, true, int(calls.Load()))
+			if result.Bundle != nil || result.EvidenceManifestSHA256 != nil {
+				t.Fatal("failure published partial evidence")
+			}
+		})
+	}
+}
+
+func TestServiceEnforcesPerDocumentAndWholeActionTimeouts(t *testing.T) {
+	t.Run("per document", func(t *testing.T) {
+		limits := ProductionLimits()
+		limits.PerDocumentTimeoutMS = 5
+		limits.WholeActionTimeoutMS = 100
+		service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+			return roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				<-req.Context().Done()
+				return nil, req.Context().Err()
+			}), nil
+		}, &limits)
+		result, err := service.Fetch(context.Background(), inputArgs(input))
+		if err != nil {
+			t.Fatalf("fetch: %v", err)
+		}
+		assertHardStop(t, result, "DOCUMENT_TIMEOUT", true, 1)
+	})
+	t.Run("whole action", func(t *testing.T) {
+		service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+			return nil, fmt.Errorf("must not initialize")
+		}, nil)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		result, err := service.Fetch(ctx, inputArgs(input))
+		if err != nil {
+			t.Fatalf("fetch: %v", err)
+		}
+		assertHardStop(t, result, "WHOLE_ACTION_TIMEOUT", true, 0)
+	})
+}
+
+func TestProductionLimitsRemainExact(t *testing.T) {
+	got := ProductionLimits()
+	if got.ConnectTimeoutMS != 5000 || got.TLSHandshakeTimeoutMS != 5000 || got.ResponseHeaderTimeoutMS != 10000 || got.PerDocumentTimeoutMS != 20000 || got.WholeActionTimeoutMS != 90000 || got.MaxDepth != 12 || got.MaxDocuments != 64 || got.MaxReferences != 256 || got.MaxDocumentBytes != 4*1024*1024 || got.MaxTotalBytes != 32*1024*1024 || got.MaxXMLTokens != 1_000_000 || got.MaxXMLNesting != 256 || got.MaxAttributes != 128 || got.MaxAttributeBytes != 64*1024 || got.MaxEvidenceBytes != 4*1024*1024 {
+		t.Fatalf("production limits drifted: %#v", got)
+	}
+}
+
+func TestStrictTransportPinsOneDNSResolutionAndIgnoresProxyEnvironment(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = io.WriteString(w, `<ok/>`)
+	}))
+	defer server.Close()
+	parsed, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("parse server URL: %v", err)
+	}
+	rootURL := "http://localhost:" + parsed.Port() + "/invoice.wsdl?sap-client=100"
+	manifest := productionFixtureManifest(rootURL, t.TempDir())
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+	var resolutions atomic.Int32
+	transport, err := newStrictTransportWithResolver(context.Background(), manifest, func(context.Context, string) ([]net.IPAddr, error) {
+		resolutions.Add(1)
+		return []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}}, nil
+	})
+	if err != nil {
+		t.Fatalf("create strict transport: %v", err)
+	}
+	for _, path := range []string{"/one", "/two"} {
+		req, _ := http.NewRequest(http.MethodGet, "http://localhost:"+parsed.Port()+path, nil)
+		resp, err := transport.RoundTrip(req)
+		if err != nil {
+			t.Fatalf("round trip %s: %v", path, err)
+		}
+		_ = resp.Body.Close()
+	}
+	if resolutions.Load() != 1 {
+		t.Fatalf("DNS resolved %d times, want exactly once", resolutions.Load())
+	}
+}
+
+func TestBundleDigestsAreDeterministicAcrossIndependentAttempts(t *testing.T) {
+	service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+		return roundTripFunc(responseRoundTrip(http.StatusOK, "application/xml", minimalWSDL())), nil
+	}, nil)
+	first, err := service.Fetch(context.Background(), inputArgs(input))
+	if err != nil || first.Bundle == nil {
+		t.Fatalf("first attempt: result=%#v err=%v", first, err)
+	}
+	second, err := service.Fetch(context.Background(), inputArgs(input))
+	if err != nil || second.Bundle == nil {
+		t.Fatalf("second attempt: result=%#v err=%v", second, err)
+	}
+	if first.AttemptID == second.AttemptID {
+		t.Fatal("attempt IDs unexpectedly match")
+	}
+	if first.Bundle.BundleSHA256 != second.Bundle.BundleSHA256 {
+		t.Fatalf("bundle digest drifted: first=%s second=%s", first.Bundle.BundleSHA256, second.Bundle.BundleSHA256)
+	}
+	if len(first.Bundle.Documents) != 1 || len(second.Bundle.Documents) != 1 || first.Bundle.Documents[0] != second.Bundle.Documents[0] {
+		t.Fatalf("document evidence drifted: first=%#v second=%#v", first.Bundle.Documents, second.Bundle.Documents)
+	}
+}
+
+type fixtureLedger struct {
+	calls atomic.Int32
+	err   error
+}
+
+func (l *fixtureLedger) Consume(Input) error { l.calls.Add(1); return l.err }
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+func fixtureService(t *testing.T, ledger PermitLedger, factory func(context.Context, Manifest) (http.RoundTripper, error), limits *Limits) (*Service, Input) {
+	t.Helper()
+	manifest := productionFixtureManifest("https://gpi.invalid/invoice.wsdl?sap-client=100", t.TempDir())
+	if limits != nil {
+		manifest.Limits = *limits
+	}
+	digest, err := ManifestSHA256(manifest)
+	if err != nil {
+		t.Fatalf("manifest digest: %v", err)
+	}
+	service, err := NewService(ServiceConfig{Manifest: manifest, ManifestSHA256: digest, Ledger: ledger, Credentials: Credentials{Username: "fixture-user", Password: "fixture-password"}, EvidenceKey: []byte("0123456789abcdef0123456789abcdef"), TransportFactory: factory})
+	if err != nil {
+		t.Fatalf("service: %v", err)
+	}
+	return service, Input{SystemID: SystemID, ContractID: ContractID, RequestManifestSHA256: digest, PermitID: "6ba7b810-9dad-41d1-80b4-00c04fd430c8"}
+}
+
+func inputArgs(input Input) map[string]interface{} {
+	return map[string]interface{}{"system_id": input.SystemID, "contract_id": input.ContractID, "request_manifest_sha256": input.RequestManifestSHA256, "permit_id": input.PermitID}
+}
+func assertHardStop(t *testing.T, result Result, code string, consumed bool, gets int) {
+	t.Helper()
+	if result.Outcome != "HARD_STOP" || result.HardStop == nil || result.HardStop.Code != code || result.PermitConsumed != consumed || result.NetworkGetsStarted != gets || result.Bundle != nil || result.EvidenceManifestSHA256 != nil {
+		t.Fatalf("unexpected hard stop: result=%#v hard_stop=%+v want_code=%s", result, result.HardStop, code)
+	}
+}
+func responseRoundTrip(status int, contentType, body string) func(*http.Request) (*http.Response, error) {
+	return func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": []string{contentType}}, Body: io.NopCloser(strings.NewReader(body)), Request: req}, nil
+	}
+}
+func minimalWSDL() string {
+	return `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:tns="urn:employee-shop:invoice" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" targetNamespace="urn:employee-shop:invoice"><wsdl:message name="InvoiceRequest"/><wsdl:message name="InvoiceResponse"/><wsdl:portType name="InvoicePortType"><wsdl:operation name="SubmitInvoice"><wsdl:input message="tns:InvoiceRequest"/><wsdl:output message="tns:InvoiceResponse"/></wsdl:operation></wsdl:portType><wsdl:binding name="InvoiceBinding" type="tns:InvoicePortType"><soap:binding/><wsdl:operation name="SubmitInvoice"><soap:operation soapAction="urn:private:employee-shop:invoice"/></wsdl:operation></wsdl:binding><wsdl:service name="InvoiceService"><wsdl:port name="InvoicePort" binding="tns:InvoiceBinding"><soap:address location="https://gpi.invalid/private"/></wsdl:port></wsdl:service></wsdl:definitions>`
+}
