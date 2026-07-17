@@ -146,6 +146,7 @@ type MessagePart struct {
 type XSDComponent struct {
 	ComponentID           string     `json:"component_id"`
 	ParentID              string     `json:"parent_id"`
+	SchemaNamespace       string     `json:"schema_namespace"`
 	Namespace             string     `json:"namespace"`
 	ParentQName           string     `json:"parent_qname"`
 	Name                  string     `json:"name"`
@@ -163,6 +164,7 @@ type XSDComponent struct {
 	Facets                []XSDFacet `json:"facets"`
 	Redefines             bool       `json:"-"`
 	RedefinitionRootQName string     `json:"-"`
+	UsesSchemaNamespace   bool       `json:"-"`
 }
 
 type XSDFacet struct {

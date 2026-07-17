@@ -107,6 +107,7 @@
                     "properties": {
                       "component_id": {"type": "string", "minLength": 1},
                       "parent_id": {"type": "string"},
+                      "schema_namespace": {"type": "string"},
                       "namespace": {"type": "string"},
                       "parent_qname": {"type": "string"},
                       "name": {"type": "string"},
@@ -134,7 +135,7 @@
                         }
                       }
                     },
-                    "required": ["component_id", "parent_id", "namespace", "parent_qname", "name", "anonymous", "kind", "order", "type", "ref_qname", "inline_type_id", "min_occurs", "max_occurs", "nillable", "type_references", "derivation", "facets"],
+                    "required": ["component_id", "parent_id", "schema_namespace", "namespace", "parent_qname", "name", "anonymous", "kind", "order", "type", "ref_qname", "inline_type_id", "min_occurs", "max_occurs", "nillable", "type_references", "derivation", "facets"],
                     "additionalProperties": false
                   }
                 },

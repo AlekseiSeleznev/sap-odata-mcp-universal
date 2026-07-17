@@ -128,6 +128,9 @@ func TestServiceFetchesRecursiveClosureOnceAndPublishesSanitizedAtomicEvidence(t
 	if !hasOrderedElement(contract.XSDComponents, "{urn:employee-shop:types}ChameleonType", "Nested", 1) {
 		t.Fatalf("chameleon XSD parent QName was not rebased: %#v", contract.XSDComponents)
 	}
+	if !hasXSDNamespaceIdentity(contract.XSDComponents, "ChameleonType", "urn:employee-shop:types", "urn:employee-shop:types") || !hasXSDNamespaceIdentity(contract.XSDComponents, "Nested", "urn:employee-shop:types", "") {
+		t.Fatalf("chameleon XSD schema/local namespace identity was not rebased exactly: %#v", contract.XSDComponents)
+	}
 
 	encoded, err := json.Marshal(result)
 	if err != nil {
@@ -216,9 +219,140 @@ func TestServicePublishesAnonymousXSDTypesWithExactStructuralEvidence(t *testing
 	if codeType["parent_id"] != codeID || codeType["anonymous"] != true || codeType["kind"] != "simpleType" || codeType["type"] != "{http://www.w3.org/2001/XMLSchema}string" || codeType["derivation"] != "restriction" {
 		t.Fatalf("anonymous simple type restriction evidence missing: %#v", codeType)
 	}
-	facets, ok := codeType["facets"].([]interface{})
-	if !ok || len(facets) != 2 {
+	if !hasFacetEvidence(codeType, "length", "3") || !hasFacetEvidence(codeType, "pattern", "[A-Z]{3}") {
 		t.Fatalf("anonymous simple type facets missing: %#v", codeType)
+	}
+}
+
+func TestServicePublishesNestedAnonymousSimpleTypesAndLocalNamespaceIdentity(t *testing.T) {
+	wsdl := strings.Replace(minimalWSDL(), `<wsdl:message name="InvoiceRequest"/>`, `<wsdl:types><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:employee-shop:invoice" elementFormDefault="unqualified" attributeFormDefault="unqualified"><xsd:element name="InvoiceRequest"><xsd:complexType><xsd:sequence><xsd:element name="LocalDefault"><xsd:simpleType><xsd:union memberTypes="xsd:string"><xsd:simpleType><xsd:restriction base="xsd:int"><xsd:minInclusive value="1"/></xsd:restriction></xsd:simpleType><xsd:simpleType><xsd:list><xsd:simpleType><xsd:restriction base="xsd:token"><xsd:pattern value="[A-Z]+"/></xsd:restriction></xsd:simpleType></xsd:list></xsd:simpleType><xsd:simpleType><xsd:restriction><xsd:simpleType><xsd:restriction base="xsd:string"><xsd:length value="2"/></xsd:restriction></xsd:simpleType><xsd:maxLength value="4"/></xsd:restriction></xsd:simpleType></xsd:union></xsd:simpleType></xsd:element><xsd:element name="Qualified" form="qualified" type="xsd:string"/></xsd:sequence><xsd:attribute name="Flag"><xsd:simpleType><xsd:restriction base="xsd:string"><xsd:length value="1"/></xsd:restriction></xsd:simpleType></xsd:attribute></xsd:complexType></xsd:element></xsd:schema></wsdl:types><wsdl:message name="InvoiceRequest"><wsdl:part name="parameters" element="tns:InvoiceRequest"/></wsdl:message>`, 1)
+
+	fetch := func() Result {
+		service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+			return roundTripFunc(responseRoundTrip(http.StatusOK, "application/xml", wsdl)), nil
+		}, nil)
+		result, err := service.Fetch(context.Background(), inputArgs(input))
+		if err != nil {
+			t.Fatalf("fetch: %v", err)
+		}
+		if result.Outcome != "COMPLETE" || result.Bundle == nil || result.HardStop != nil {
+			t.Fatalf("nested anonymous XSD evidence was not completed: %#v hard_stop=%+v", result, result.HardStop)
+		}
+		return result
+	}
+
+	first := fetch()
+	second := fetch()
+	firstJSON, err := json.Marshal(first.Bundle.Contract.XSDComponents)
+	if err != nil {
+		t.Fatalf("encode first XSD evidence: %v", err)
+	}
+	secondJSON, err := json.Marshal(second.Bundle.Contract.XSDComponents)
+	if err != nil {
+		t.Fatalf("encode second XSD evidence: %v", err)
+	}
+	if string(firstJSON) != string(secondJSON) {
+		t.Fatalf("XSD evidence ordering is not deterministic:\nfirst:  %s\nsecond: %s", firstJSON, secondJSON)
+	}
+
+	var components []map[string]interface{}
+	if err := json.Unmarshal(firstJSON, &components); err != nil {
+		t.Fatalf("decode public XSD evidence: %v", err)
+	}
+	requestID := "xsd:element:{urn:employee-shop:invoice}InvoiceRequest"
+	requestTypeID := requestID + "/complexType[1]"
+	localID := requestTypeID + "/element[1]"
+	qualifiedID := requestTypeID + "/element[2]"
+	attributeID := requestTypeID + "/attribute[3]"
+
+	local := componentEvidenceByID(t, components, localID)
+	qualified := componentEvidenceByID(t, components, qualifiedID)
+	attribute := componentEvidenceByID(t, components, attributeID)
+	for name, component := range map[string]map[string]interface{}{"local element": local, "local attribute": attribute} {
+		if component["schema_namespace"] != "urn:employee-shop:invoice" || component["namespace"] != "" {
+			t.Fatalf("%s namespace identity drifted: %#v", name, component)
+		}
+	}
+	if qualified["schema_namespace"] != "urn:employee-shop:invoice" || qualified["namespace"] != "urn:employee-shop:invoice" {
+		t.Fatalf("qualified local element namespace identity drifted: %#v", qualified)
+	}
+
+	outerTypeID := localID + "/simpleType[1]"
+	outerType := componentEvidenceByID(t, components, outerTypeID)
+	if outerType["schema_namespace"] != "urn:employee-shop:invoice" || outerType["namespace"] != "" || outerType["derivation"] != "union" || outerType["parent_id"] != localID {
+		t.Fatalf("anonymous union identity drifted: %#v", outerType)
+	}
+	unionReferences, ok := outerType["type_references"].([]interface{})
+	if !ok || len(unionReferences) != 1 || unionReferences[0] != "{http://www.w3.org/2001/XMLSchema}string" {
+		t.Fatalf("union member type references missing: %#v", outerType)
+	}
+
+	atomicMember := componentEvidenceByID(t, components, outerTypeID+"/simpleType[1]")
+	listMemberID := outerTypeID + "/simpleType[2]"
+	listMember := componentEvidenceByID(t, components, listMemberID)
+	restrictedMemberID := outerTypeID + "/simpleType[3]"
+	restrictedMember := componentEvidenceByID(t, components, restrictedMemberID)
+	if atomicMember["parent_id"] != outerTypeID || atomicMember["order"] != float64(1) || atomicMember["derivation"] != "restriction" || atomicMember["type"] != "{http://www.w3.org/2001/XMLSchema}int" {
+		t.Fatalf("anonymous union member restriction missing: %#v", atomicMember)
+	}
+	if !hasFacetEvidence(atomicMember, "minInclusive", "1") {
+		t.Fatalf("anonymous union member facet missing: %#v", atomicMember)
+	}
+	if listMember["parent_id"] != outerTypeID || listMember["order"] != float64(2) || listMember["derivation"] != "list" {
+		t.Fatalf("anonymous list member missing: %#v", listMember)
+	}
+	listItem := componentEvidenceByID(t, components, listMemberID+"/simpleType[1]")
+	if listItem["parent_id"] != listMemberID || listItem["derivation"] != "restriction" || listItem["type"] != "{http://www.w3.org/2001/XMLSchema}token" {
+		t.Fatalf("nested anonymous list item missing: %#v", listItem)
+	}
+	if !hasFacetEvidence(listItem, "pattern", "[A-Z]+") {
+		t.Fatalf("nested anonymous list item facet missing: %#v", listItem)
+	}
+	if restrictedMember["parent_id"] != outerTypeID || restrictedMember["order"] != float64(3) || restrictedMember["derivation"] != "restriction" || restrictedMember["type"] != "" {
+		t.Fatalf("anonymous restriction member missing: %#v", restrictedMember)
+	}
+	restrictionBase := componentEvidenceByID(t, components, restrictedMemberID+"/simpleType[1]")
+	if restrictionBase["parent_id"] != restrictedMemberID || restrictionBase["derivation"] != "restriction" || restrictionBase["type"] != "{http://www.w3.org/2001/XMLSchema}string" {
+		t.Fatalf("nested anonymous restriction base missing: %#v", restrictionBase)
+	}
+	if !hasFacetEvidence(restrictionBase, "length", "2") || !hasFacetEvidence(restrictedMember, "maxLength", "4") {
+		t.Fatalf("nested anonymous restriction facets missing: member=%#v base=%#v", restrictedMember, restrictionBase)
+	}
+
+	attributeType := componentEvidenceByID(t, components, attributeID+"/simpleType[1]")
+	if attribute["inline_type_id"] != attributeID+"/simpleType[1]" || attributeType["parent_id"] != attributeID || attributeType["anonymous"] != true {
+		t.Fatalf("anonymous attribute type relationship missing: attribute=%#v type=%#v", attribute, attributeType)
+	}
+	if !hasFacetEvidence(attributeType, "length", "1") {
+		t.Fatalf("anonymous attribute restriction facet missing: %#v", attributeType)
+	}
+}
+
+func TestServiceFailsClosedOnAmbiguousAnonymousXSDTypeOwnership(t *testing.T) {
+	tests := []struct {
+		name     string
+		fragment string
+	}{
+		{"element named and anonymous type", `<xsd:element name="InvoiceRequest" type="xsd:string"><xsd:simpleType><xsd:restriction base="xsd:string"/></xsd:simpleType></xsd:element>`},
+		{"attribute owns anonymous complex type", `<xsd:element name="InvoiceRequest"><xsd:complexType><xsd:attribute name="Flag"><xsd:complexType/></xsd:attribute></xsd:complexType></xsd:element>`},
+		{"list names and inlines item type", `<xsd:element name="InvoiceRequest"><xsd:simpleType><xsd:list itemType="xsd:string"><xsd:simpleType><xsd:restriction base="xsd:string"/></xsd:simpleType></xsd:list></xsd:simpleType></xsd:element>`},
+		{"restriction names and inlines base type", `<xsd:element name="InvoiceRequest"><xsd:simpleType><xsd:restriction base="xsd:string"><xsd:simpleType><xsd:restriction base="xsd:string"/></xsd:simpleType></xsd:restriction></xsd:simpleType></xsd:element>`},
+		{"list has multiple inline item types", `<xsd:element name="InvoiceRequest"><xsd:simpleType><xsd:list><xsd:simpleType><xsd:restriction base="xsd:string"/></xsd:simpleType><xsd:simpleType><xsd:restriction base="xsd:string"/></xsd:simpleType></xsd:list></xsd:simpleType></xsd:element>`},
+		{"invalid nillable lexical value", `<xsd:element name="InvoiceRequest" nillable="yes"/>`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			schema := `<wsdl:types><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:employee-shop:invoice">` + tc.fragment + `</xsd:schema></wsdl:types>`
+			wsdl := strings.Replace(minimalWSDL(), `<wsdl:message name="InvoiceRequest"/>`, schema+`<wsdl:message name="InvoiceRequest"/>`, 1)
+			service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+				return roundTripFunc(responseRoundTrip(http.StatusOK, "application/xml", wsdl)), nil
+			}, nil)
+			result, err := service.Fetch(context.Background(), inputArgs(input))
+			if err != nil {
+				t.Fatalf("fetch: %v", err)
+			}
+			assertHardStop(t, result, "XSD_DECLARATION_INVALID", true, 1)
+		})
 	}
 }
 
@@ -231,6 +365,20 @@ func componentEvidenceByID(t *testing.T, components []map[string]interface{}, id
 	}
 	t.Fatalf("XSD component %q not found in %#v", id, components)
 	return nil
+}
+
+func hasFacetEvidence(component map[string]interface{}, name, value string) bool {
+	facets, ok := component["facets"].([]interface{})
+	if !ok {
+		return false
+	}
+	for _, rawFacet := range facets {
+		facet, ok := rawFacet.(map[string]interface{})
+		if ok && facet["name"] == name && facet["value"] == value {
+			return true
+		}
+	}
+	return false
 }
 
 func productionFixtureManifest(rootURL, evidenceDir string) Manifest {
@@ -295,6 +443,15 @@ func hasFacet(components []XSDComponent, name, facet, value string) bool {
 func hasOrderedElement(components []XSDComponent, parent, name string, order int) bool {
 	for _, component := range components {
 		if component.ParentQName == parent && component.Name == name && component.Order == order {
+			return true
+		}
+	}
+	return false
+}
+
+func hasXSDNamespaceIdentity(components []XSDComponent, name, schemaNamespace, namespace string) bool {
+	for _, component := range components {
+		if component.Name == name && component.SchemaNamespace == schemaNamespace && component.Namespace == namespace {
 			return true
 		}
 	}

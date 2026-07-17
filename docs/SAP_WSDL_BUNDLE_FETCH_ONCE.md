@@ -106,12 +106,14 @@ Imported WSDL documents are resolved as one semantic symbol table: service,
 port, binding, portType, operation, input/output/fault messages, and message
 parts may live in separate documents. Duplicate WSDL or XSD definitions must be
 identical; conflicts hard-stop. XSD evidence gives every declaration a stable
-structural `component_id` and `parent_id`, and retains namespace, expanded
-parent QName when one exists, sequence order, cardinality, nillability, QName
+structural `component_id` and `parent_id`, and retains schema namespace,
+effective local declaration namespace after `form` defaults, expanded parent
+QName when one exists, sequence order, cardinality, nillability, QName
 references, named or inline type relationships, derivation, and facets.
 Anonymous simple and complex types use an explicit `anonymous=true` component
 owned through the declaring element or attribute's `inline_type_id`; nested
-anonymous types extend the same structural path without inventing an XSD QName.
+anonymous simple types under restriction, list, and union extend the same
+structural path without inventing an XSD QName.
 
 The evidence model resolves only the exact simple-type `xsd:redefine` form:
 `restriction` of the original self QName, with inherited and new facets retained.
@@ -144,4 +146,4 @@ Before a separately approved live call:
 Reviewed canonical schema digests:
 
 - input: `94dd1a4f23157cd0076a685b8104d2cddec090fec99b6fc1a624cbc334007ea2`;
-- output: `7af195c4ee06bf8e70f3e270c820b9a26b6a9b167538dfaf22ba5a157533f359`.
+- output: `244d13e644fa3cff59426eb4695c4542f2dd44e94dc5f52b14364dfb7376d674`.

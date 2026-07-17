@@ -148,15 +148,17 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 			}
 			doc.Parsed.TargetNamespace = item.InheritedXSDNamespace
 			for index := range doc.Parsed.XSDComponents {
-				if doc.Parsed.XSDComponents[index].Namespace == "" {
+				if doc.Parsed.XSDComponents[index].SchemaNamespace == "" {
+					doc.Parsed.XSDComponents[index].SchemaNamespace = item.InheritedXSDNamespace
+				}
+				if doc.Parsed.XSDComponents[index].UsesSchemaNamespace && doc.Parsed.XSDComponents[index].Namespace == "" {
 					doc.Parsed.XSDComponents[index].Namespace = item.InheritedXSDNamespace
-					doc.Parsed.XSDComponents[index].ParentQName = rebaseEmptyQName(doc.Parsed.XSDComponents[index].ParentQName, item.InheritedXSDNamespace)
-					doc.Parsed.XSDComponents[index].Type = rebaseEmptyQName(doc.Parsed.XSDComponents[index].Type, item.InheritedXSDNamespace)
-					doc.Parsed.XSDComponents[index].RefQName = rebaseEmptyQName(doc.Parsed.XSDComponents[index].RefQName, item.InheritedXSDNamespace)
-					doc.Parsed.XSDComponents[index].RedefinitionRootQName = rebaseEmptyQName(doc.Parsed.XSDComponents[index].RedefinitionRootQName, item.InheritedXSDNamespace)
-					for referenceIndex := range doc.Parsed.XSDComponents[index].TypeReferences {
-						doc.Parsed.XSDComponents[index].TypeReferences[referenceIndex] = rebaseEmptyQName(doc.Parsed.XSDComponents[index].TypeReferences[referenceIndex], item.InheritedXSDNamespace)
-					}
+				}
+				doc.Parsed.XSDComponents[index].Type = rebaseEmptyQName(doc.Parsed.XSDComponents[index].Type, item.InheritedXSDNamespace)
+				doc.Parsed.XSDComponents[index].RefQName = rebaseEmptyQName(doc.Parsed.XSDComponents[index].RefQName, item.InheritedXSDNamespace)
+				doc.Parsed.XSDComponents[index].RedefinitionRootQName = rebaseEmptyQName(doc.Parsed.XSDComponents[index].RedefinitionRootQName, item.InheritedXSDNamespace)
+				for referenceIndex := range doc.Parsed.XSDComponents[index].TypeReferences {
+					doc.Parsed.XSDComponents[index].TypeReferences[referenceIndex] = rebaseEmptyQName(doc.Parsed.XSDComponents[index].TypeReferences[referenceIndex], item.InheritedXSDNamespace)
 				}
 			}
 			if err := reindexXSDComponents(doc.Parsed.XSDComponents); err != nil {
@@ -364,7 +366,10 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 	var currentMessageDepth int
 	componentAtDepth := map[int]int{}
 	childOrder := map[int]int{}
+	nestedAnonymousCount := map[int]int{}
 	schemaTargetAtDepth := map[int]string{}
+	schemaElementFormAtDepth := map[int]string{}
+	schemaAttributeFormAtDepth := map[int]string{}
 	policyDepth := 0
 	redefineDepth := 0
 
@@ -441,7 +446,14 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 			}
 			if value.Name.Space == xsdNamespace && value.Name.Local == "schema" {
 				target := attribute(value, "targetNamespace")
+				elementForm := attributeOr(value, "elementFormDefault", "unqualified")
+				attributeForm := attributeOr(value, "attributeFormDefault", "unqualified")
+				if !validXSDForm(elementForm) || !validXSDForm(attributeForm) {
+					return parsed, stop("xml", "XSD_DECLARATION_INVALID", "XSD form default is invalid")
+				}
 				schemaTargetAtDepth[depth] = target
+				schemaElementFormAtDepth[depth] = elementForm
+				schemaAttributeFormAtDepth[depth] = attributeForm
 				if parsed.Kind == "XSD10" && depth == 1 {
 					parsed.TargetNamespace = target
 				}
@@ -579,8 +591,15 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 							invalidPlacement = true
 						} else {
 							parent := parsed.XSDComponents[parentIndex]
-							validOwner := parent.Kind == "element" || (parent.Kind == "attribute" && value.Name.Local == "simpleType")
-							if !validOwner || parent.Type != "" || parent.RefQName != "" || parent.InlineTypeID != "" {
+							inlineOwner := parent.Kind == "element" || (parent.Kind == "attribute" && value.Name.Local == "simpleType")
+							nestedSimpleOwner := value.Name.Local == "simpleType" && parent.Kind == "simpleType" && (parent.Derivation == "restriction" || parent.Derivation == "list" || parent.Derivation == "union")
+							if !inlineOwner && !nestedSimpleOwner {
+								invalidPlacement = true
+							} else if inlineOwner && (parent.Type != "" || parent.RefQName != "" || parent.InlineTypeID != "") {
+								invalidPlacement = true
+							} else if nestedSimpleOwner && parent.Derivation != "union" && parent.Type != "" {
+								invalidPlacement = true
+							} else if nestedSimpleOwner && parent.Derivation != "union" && nestedAnonymousCount[parentIndex] > 0 {
 								invalidPlacement = true
 							}
 						}
@@ -608,7 +627,28 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 							order = childOrder[parentIndex]
 						}
 						schemaTarget, _ := nearestString(schemaTargetAtDepth, depth)
-						componentID := globalXSDComponentID(schemaTarget, value.Name.Local, name)
+						componentNamespace := schemaTarget
+						usesSchemaNamespace := true
+						if anonymous {
+							componentNamespace = ""
+							usesSchemaNamespace = false
+						} else if !globalDeclaration && (value.Name.Local == "element" || value.Name.Local == "attribute") {
+							defaultForm := "unqualified"
+							if value.Name.Local == "element" {
+								defaultForm, _ = nearestString(schemaElementFormAtDepth, depth)
+							} else {
+								defaultForm, _ = nearestString(schemaAttributeFormAtDepth, depth)
+							}
+							form := attributeOr(value, "form", defaultForm)
+							if !validXSDForm(form) {
+								return parsed, stop("xml", "XSD_DECLARATION_INVALID", "local XSD declaration form is invalid")
+							}
+							usesSchemaNamespace = form == "qualified"
+							if !usesSchemaNamespace {
+								componentNamespace = ""
+							}
+						}
+						componentID := globalXSDComponentID(componentNamespace, value.Name.Local, name)
 						if parentID != "" {
 							componentID = localXSDComponentID(parentID, value.Name.Local, order)
 						}
@@ -621,14 +661,16 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 								redefinitionRoot = qname(root.Namespace, root.Name)
 							}
 						}
-						component := XSDComponent{ComponentID: componentID, ParentID: parentID, Namespace: schemaTarget, ParentQName: parentQName, Name: name, Anonymous: anonymous, Kind: value.Name.Local, Order: order, Type: expandQName(rawType, ns), RefQName: refQName, MinOccurs: attributeOr(value, "minOccurs", "1"), MaxOccurs: attributeOr(value, "maxOccurs", "1"), Nillable: nillable, TypeReferences: []string{}, Facets: []XSDFacet{}, Redefines: directRedefinition, RedefinitionRootQName: redefinitionRoot}
+						component := XSDComponent{ComponentID: componentID, ParentID: parentID, SchemaNamespace: schemaTarget, Namespace: componentNamespace, ParentQName: parentQName, Name: name, Anonymous: anonymous, Kind: value.Name.Local, Order: order, Type: expandQName(rawType, ns), RefQName: refQName, MinOccurs: attributeOr(value, "minOccurs", "1"), MaxOccurs: attributeOr(value, "maxOccurs", "1"), Nillable: nillable, TypeReferences: []string{}, Facets: []XSDFacet{}, Redefines: directRedefinition, RedefinitionRootQName: redefinitionRoot, UsesSchemaNamespace: usesSchemaNamespace}
 						parsed.XSDComponents = append(parsed.XSDComponents, component)
 						componentIndex := len(parsed.XSDComponents) - 1
 						componentAtDepth[depth] = componentIndex
-						if anonymous {
+						if anonymous && (parsed.XSDComponents[parentIndex].Kind == "element" || parsed.XSDComponents[parentIndex].Kind == "attribute") {
 							parent := parsed.XSDComponents[parentIndex]
 							parent.InlineTypeID = componentID
 							parsed.XSDComponents[parentIndex] = parent
+						} else if anonymous {
+							nestedAnonymousCount[parentIndex]++
 						}
 					}
 				}
@@ -695,6 +737,8 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 			}
 			delete(componentAtDepth, depth)
 			delete(schemaTargetAtDepth, depth)
+			delete(schemaElementFormAtDepth, depth)
+			delete(schemaAttributeFormAtDepth, depth)
 			if len(namespaces) > 1 {
 				namespaces = namespaces[:len(namespaces)-1]
 			}
@@ -944,7 +988,10 @@ func buildContract(ctx context.Context, manifest Manifest, documents map[string]
 		if components[i].Name != components[j].Name {
 			return components[i].Name < components[j].Name
 		}
-		return components[i].Kind < components[j].Kind
+		if components[i].Kind != components[j].Kind {
+			return components[i].Kind < components[j].Kind
+		}
+		return components[i].ComponentID < components[j].ComponentID
 	})
 	actionDigest := sha256.Sum256([]byte(action))
 	return &ContractSummary{
@@ -1271,6 +1318,7 @@ func localXSDComponentID(parentID, kind string, order int) string {
 
 func reindexXSDComponents(components []XSDComponent) error {
 	rebased := make(map[string]string, len(components))
+	rebasedIndex := make(map[string]int, len(components))
 	inlineTypes := make([]string, len(components))
 	for index := range components {
 		component := &components[index]
@@ -1287,9 +1335,12 @@ func reindexXSDComponents(components []XSDComponent) error {
 				return fmt.Errorf("XSD component parent did not resolve")
 			}
 			component.ParentID = parentID
+			parent := components[rebasedIndex[parentID]]
+			component.ParentQName = qname(parent.Namespace, parent.Name)
 			component.ComponentID = localXSDComponentID(parentID, component.Kind, component.Order)
 		}
 		rebased[oldID] = component.ComponentID
+		rebasedIndex[component.ComponentID] = index
 	}
 	for index, oldInlineTypeID := range inlineTypes {
 		if oldInlineTypeID == "" {
@@ -1335,6 +1386,10 @@ func isFacet(local string) bool {
 		return true
 	}
 	return false
+}
+
+func validXSDForm(value string) bool {
+	return value == "qualified" || value == "unqualified"
 }
 
 func xsdNillable(value xml.StartElement) (bool, *stopError) {
@@ -1416,7 +1471,7 @@ func sanitizeComponents(values []XSDComponent, manifest Manifest, key []byte) []
 		for _, facet := range value.Facets {
 			facets = append(facets, XSDFacet{Name: facet.Name, Value: sanitizeValue(facet.Value, manifest, key)})
 		}
-		result = append(result, XSDComponent{ComponentID: sanitizeValue(value.ComponentID, manifest, key), ParentID: sanitizeValue(value.ParentID, manifest, key), Namespace: sanitizeValue(value.Namespace, manifest, key), ParentQName: sanitizeValue(value.ParentQName, manifest, key), Name: sanitizeValue(value.Name, manifest, key), Anonymous: value.Anonymous, Kind: value.Kind, Order: value.Order, Type: sanitizeValue(value.Type, manifest, key), RefQName: sanitizeValue(value.RefQName, manifest, key), InlineTypeID: sanitizeValue(value.InlineTypeID, manifest, key), MinOccurs: value.MinOccurs, MaxOccurs: value.MaxOccurs, Nillable: value.Nillable, TypeReferences: sanitizeStrings(value.TypeReferences, manifest, key), Derivation: value.Derivation, Facets: facets})
+		result = append(result, XSDComponent{ComponentID: sanitizeValue(value.ComponentID, manifest, key), ParentID: sanitizeValue(value.ParentID, manifest, key), SchemaNamespace: sanitizeValue(value.SchemaNamespace, manifest, key), Namespace: sanitizeValue(value.Namespace, manifest, key), ParentQName: sanitizeValue(value.ParentQName, manifest, key), Name: sanitizeValue(value.Name, manifest, key), Anonymous: value.Anonymous, Kind: value.Kind, Order: value.Order, Type: sanitizeValue(value.Type, manifest, key), RefQName: sanitizeValue(value.RefQName, manifest, key), InlineTypeID: sanitizeValue(value.InlineTypeID, manifest, key), MinOccurs: value.MinOccurs, MaxOccurs: value.MaxOccurs, Nillable: value.Nillable, TypeReferences: sanitizeStrings(value.TypeReferences, manifest, key), Derivation: value.Derivation, Facets: facets})
 	}
 	return result
 }

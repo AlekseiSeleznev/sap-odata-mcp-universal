@@ -218,7 +218,7 @@ func validateBundle(bundle *Bundle) error {
 			return fmt.Errorf("duplicate XSD component identity")
 		}
 		componentByID[component.ComponentID] = component
-		if component.ComponentID == "" || component.Namespace == "" || !validXSDComponentKind(component.Kind) || component.Order < 0 || component.MinOccurs == "" || component.MaxOccurs == "" || component.TypeReferences == nil || component.Facets == nil {
+		if component.ComponentID == "" || !validXSDComponentKind(component.Kind) || component.Order < 0 || component.MinOccurs == "" || component.MaxOccurs == "" || component.TypeReferences == nil || component.Facets == nil {
 			return fmt.Errorf("XSD component invariant failed")
 		}
 		if component.ParentID == "" {
@@ -258,8 +258,12 @@ func validateBundle(bundle *Bundle) error {
 			if !ok {
 				return fmt.Errorf("XSD component parent invariant failed")
 			}
-			if component.Anonymous && parent.InlineTypeID != component.ComponentID {
-				return fmt.Errorf("anonymous XSD owner invariant failed")
+			if component.Anonymous {
+				inlineOwner := parent.Kind == "element" || parent.Kind == "attribute"
+				nestedSimpleOwner := component.Kind == "simpleType" && parent.Kind == "simpleType" && (parent.Derivation == "restriction" || parent.Derivation == "list" || parent.Derivation == "union")
+				if (!inlineOwner && !nestedSimpleOwner) || (inlineOwner && parent.InlineTypeID != component.ComponentID) {
+					return fmt.Errorf("anonymous XSD owner invariant failed")
+				}
 			}
 		}
 		if component.InlineTypeID != "" {
