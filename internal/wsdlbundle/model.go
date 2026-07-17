@@ -114,29 +114,43 @@ type Edge struct {
 }
 
 type ContractSummary struct {
-	WSDLVersion                     string         `json:"wsdl_version"`
-	TargetNamespaces                []string       `json:"target_namespaces"`
-	ServiceQName                    string         `json:"service_qname"`
-	PortQName                       string         `json:"port_qname"`
-	BindingQName                    string         `json:"binding_qname"`
-	SOAPVersion                     string         `json:"soap_version"`
-	Operation                       string         `json:"operation"`
-	InputMessageQName               string         `json:"input_message_qname"`
-	OutputMessageQName              *string        `json:"output_message_qname"`
-	FaultMessageQNames              []string       `json:"fault_message_qnames"`
-	MessageExchange                 string         `json:"message_exchange"`
-	SOAPActionSHA256                string         `json:"soap_action_sha256"`
-	SOAPActionMatchesSealedExpected bool           `json:"soap_action_matches_sealed_expected"`
-	XSDComponents                   []XSDComponent `json:"xsd_components"`
-	PolicyAssertionQNames           []string       `json:"policy_assertion_qnames"`
+	WSDLVersion                     string           `json:"wsdl_version"`
+	TargetNamespaces                []string         `json:"target_namespaces"`
+	ServiceQName                    string           `json:"service_qname"`
+	PortQName                       string           `json:"port_qname"`
+	BindingQName                    string           `json:"binding_qname"`
+	SOAPVersion                     string           `json:"soap_version"`
+	Operation                       string           `json:"operation"`
+	InputMessageQName               string           `json:"input_message_qname"`
+	OutputMessageQName              *string          `json:"output_message_qname"`
+	FaultMessageQNames              []string         `json:"fault_message_qnames"`
+	MessageExchange                 string           `json:"message_exchange"`
+	SOAPActionSHA256                string           `json:"soap_action_sha256"`
+	SOAPActionMatchesSealedExpected bool             `json:"soap_action_matches_sealed_expected"`
+	Messages                        []MessageSummary `json:"messages"`
+	XSDComponents                   []XSDComponent   `json:"xsd_components"`
+	PolicyAssertionQNames           []string         `json:"policy_assertion_qnames"`
+}
+
+type MessageSummary struct {
+	QName string        `json:"qname"`
+	Parts []MessagePart `json:"parts"`
+}
+
+type MessagePart struct {
+	Name         string `json:"name"`
+	ElementQName string `json:"element_qname"`
+	TypeQName    string `json:"type_qname"`
 }
 
 type XSDComponent struct {
-	Namespace string            `json:"namespace"`
-	Name      string            `json:"name"`
-	Kind      string            `json:"kind"`
-	Type      string            `json:"type"`
-	MinOccurs string            `json:"min_occurs"`
-	MaxOccurs string            `json:"max_occurs"`
-	Facets    map[string]string `json:"facets"`
+	Namespace   string            `json:"namespace"`
+	ParentQName string            `json:"parent_qname"`
+	Name        string            `json:"name"`
+	Kind        string            `json:"kind"`
+	Order       int               `json:"order"`
+	Type        string            `json:"type"`
+	MinOccurs   string            `json:"min_occurs"`
+	MaxOccurs   string            `json:"max_occurs"`
+	Facets      map[string]string `json:"facets"`
 }

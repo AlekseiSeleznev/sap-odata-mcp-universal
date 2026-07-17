@@ -52,9 +52,15 @@ func loadWSDLBundleSchemas() (map[string]interface{}, map[string]interface{}, er
 }
 
 func (r *HierarchicalRuntime) wsdlBundleFetchHandler(ctx context.Context, args map[string]interface{}) (interface{}, error) {
-	result, err := wsdlbundle.FetchFromEnvironment(ctx, args)
+	result, err := wsdlbundle.FetchFromEnvironment(ctx, args, r.activeSystemID())
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
+}
+
+func (r *HierarchicalRuntime) activeSystemID() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.activeSystem
 }

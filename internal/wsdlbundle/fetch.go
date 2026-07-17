@@ -12,6 +12,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -68,6 +69,7 @@ type parsedDocument struct {
 	PortTypes        map[string]map[string]operationInfo
 	Bindings         map[string]bindingInfo
 	Services         map[string][]portInfo
+	Messages         map[string][]MessagePart
 	XSDComponents    []XSDComponent
 	PolicyAssertions []string
 }
@@ -186,20 +188,14 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 		}
 	}
 
-	contract, contractStop := buildContract(manifest, credentials, documents, evidenceKey)
+	contract, contractStop := buildContract(manifest, documents, evidenceKey)
 	if contractStop != nil {
 		return result, contractStop
 	}
 	docEvidence := make([]DocumentEvidence, 0, len(documents))
 	for _, doc := range documents {
 		rawDigest := sha256.Sum256(doc.Raw)
-		sanitized := map[string]interface{}{
-			"document_id":             doc.ID,
-			"kind":                    doc.Kind,
-			"target_namespace":        sanitizeValue(doc.Parsed.TargetNamespace, manifest, evidenceKey),
-			"xsd_components":          sanitizeComponents(doc.Parsed.XSDComponents, manifest, evidenceKey),
-			"policy_assertion_qnames": sanitizeStrings(doc.Parsed.PolicyAssertions, manifest, evidenceKey),
-		}
+		sanitized := sanitizedDocumentSummary(doc.ID, doc.Parsed, manifest, evidenceKey)
 		sanitizedBytes, err := json.Marshal(sanitized)
 		if err != nil {
 			return result, stop("sanitize", "SANITIZATION_FAILED", "sanitized document summary failed")
@@ -213,23 +209,30 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 	sort.Slice(docEvidence, func(i, j int) bool { return docEvidence[i].DocumentID < docEvidence[j].DocumentID })
 	edges = canonicalEdges(edges)
 	bundle := &Bundle{Complete: true, RootDocumentID: documentID(evidenceKey, root), Documents: docEvidence, Edges: edges, Contract: *contract}
-	projection := struct {
-		RootDocumentID string             `json:"root_document_id"`
-		Documents      []DocumentEvidence `json:"documents"`
-		Edges          []Edge             `json:"edges"`
-		Contract       ContractSummary    `json:"contract"`
-	}{bundle.RootDocumentID, bundle.Documents, bundle.Edges, bundle.Contract}
-	canonical, err := json.Marshal(projection)
+	bundleSHA, err := bundleSHA256(bundle.RootDocumentID, bundle.Documents, bundle.Edges)
 	if err != nil {
 		return result, stop("digest", "DIGEST_FAILED", "bundle digest failed")
 	}
-	bundleDigest := sha256.Sum256(canonical)
-	bundle.BundleSHA256 = hex.EncodeToString(bundleDigest[:])
+	bundle.BundleSHA256 = bundleSHA
 	if leak := bundleLeak(manifest, credentials, bundle); leak {
 		return result, stop("sanitize", "SANITIZATION_FAILED", "forbidden private value remained in evidence")
 	}
 	result.Bundle = bundle
 	return result, nil
+}
+
+func bundleSHA256(rootDocumentID string, documents []DocumentEvidence, edges []Edge) (string, error) {
+	projection := struct {
+		RootDocumentID string             `json:"root_document_id"`
+		Documents      []DocumentEvidence `json:"documents"`
+		Edges          []Edge             `json:"edges"`
+	}{rootDocumentID, documents, edges}
+	canonical, err := canonicalJSON(projection)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(canonical)
+	return hex.EncodeToString(digest[:]), nil
 }
 
 func fetchDocument(ctx context.Context, rawURI string, manifest Manifest, credentials Credentials, roundTripper http.RoundTripper) (*rawDocument, *string, *stopError) {
@@ -294,7 +297,7 @@ func isXMLMediaType(mediaType string) bool {
 func parseXMLDocument(body []byte, limits Limits) (parsedDocument, *stopError) {
 	decoder := xml.NewDecoder(bytes.NewReader(body))
 	decoder.Strict = true
-	parsed := parsedDocument{IDs: map[string]bool{}, PortTypes: map[string]map[string]operationInfo{}, Bindings: map[string]bindingInfo{}, Services: map[string][]portInfo{}}
+	parsed := parsedDocument{IDs: map[string]bool{}, PortTypes: map[string]map[string]operationInfo{}, Bindings: map[string]bindingInfo{}, Services: map[string][]portInfo{}, Messages: map[string][]MessagePart{}}
 	namespaces := []map[string]string{{}}
 	depth := 0
 	tokens := 0
@@ -303,7 +306,10 @@ func parseXMLDocument(body []byte, limits Limits) (parsedDocument, *stopError) {
 	var currentPortTypeDepth, currentBindingDepth, currentServiceDepth int
 	var currentPTOperation, currentBindingOperation string
 	var currentPTOperationDepth, currentBindingOperationDepth int
+	var currentMessage string
+	var currentMessageDepth int
 	componentAtDepth := map[int]int{}
+	childOrder := map[int]int{}
 	policyDepth := 0
 
 	for {
@@ -346,7 +352,8 @@ func parseXMLDocument(body []byte, limits Limits) (parsedDocument, *stopError) {
 				}
 			}
 			namespaces = append(namespaces, ns)
-			if value.Name.Space == wsdl20Namespace || (value.Name.Space == xsdNamespace && value.Name.Local == "override") {
+			if value.Name.Space == wsdl20Namespace || (value.Name.Space == xsdNamespace && isXSD11OnlyElement(value.Name.Local)) ||
+				((value.Name.Local == "Policy" || value.Name.Local == "PolicyReference") && strings.Contains(strings.ToLower(value.Name.Space), "policy") && !isPolicyNamespace(value.Name.Space)) {
 				return parsed, stop("xml", "UNSUPPORTED_DIALECT", "unsupported WSDL or XSD dialect")
 			}
 			if value.Name.Space == xincludeNamespace {
@@ -396,12 +403,31 @@ func parseXMLDocument(body []byte, limits Limits) (parsedDocument, *stopError) {
 
 			if value.Name.Space == wsdl11Namespace {
 				switch value.Name.Local {
+				case "message":
+					currentMessage = qname(parsed.TargetNamespace, attribute(value, "name"))
+					if _, exists := parsed.Messages[currentMessage]; exists {
+						return parsed, stop("contract", "CONTRACT_CONFLICT", "duplicate WSDL message definition")
+					}
+					currentMessageDepth = depth
+					parsed.Messages[currentMessage] = []MessagePart{}
+				case "part":
+					if currentMessage != "" {
+						parsed.Messages[currentMessage] = append(parsed.Messages[currentMessage], MessagePart{
+							Name: attribute(value, "name"), ElementQName: expandQName(attribute(value, "element"), ns), TypeQName: expandQName(attribute(value, "type"), ns),
+						})
+					}
 				case "portType":
 					currentPortType = qname(parsed.TargetNamespace, attribute(value, "name"))
+					if _, exists := parsed.PortTypes[currentPortType]; exists {
+						return parsed, stop("contract", "CONTRACT_CONFLICT", "duplicate WSDL portType definition")
+					}
 					currentPortTypeDepth = depth
 					parsed.PortTypes[currentPortType] = map[string]operationInfo{}
 				case "binding":
 					currentBinding = qname(parsed.TargetNamespace, attribute(value, "name"))
+					if _, exists := parsed.Bindings[currentBinding]; exists {
+						return parsed, stop("contract", "CONTRACT_CONFLICT", "duplicate WSDL binding definition")
+					}
 					currentBindingDepth = depth
 					parsed.Bindings[currentBinding] = bindingInfo{TypeQName: expandQName(attribute(value, "type"), ns), Actions: map[string]string{}}
 				case "service":
@@ -461,7 +487,15 @@ func parseXMLDocument(body []byte, limits Limits) (parsedDocument, *stopError) {
 			if value.Name.Space == xsdNamespace {
 				if value.Name.Local == "element" || value.Name.Local == "complexType" || value.Name.Local == "simpleType" {
 					if name := attribute(value, "name"); name != "" {
-						component := XSDComponent{Namespace: parsed.TargetNamespace, Name: name, Kind: value.Name.Local, Type: expandQName(attribute(value, "type"), ns), MinOccurs: attributeOr(value, "minOccurs", "1"), MaxOccurs: attributeOr(value, "maxOccurs", "1"), Facets: map[string]string{}}
+						parentQName := ""
+						order := 0
+						if parentIndex, ok := nearestComponent(componentAtDepth, depth); ok {
+							parent := parsed.XSDComponents[parentIndex]
+							parentQName = qname(parent.Namespace, parent.Name)
+							childOrder[parentIndex]++
+							order = childOrder[parentIndex]
+						}
+						component := XSDComponent{Namespace: parsed.TargetNamespace, ParentQName: parentQName, Name: name, Kind: value.Name.Local, Order: order, Type: expandQName(attribute(value, "type"), ns), MinOccurs: attributeOr(value, "minOccurs", "1"), MaxOccurs: attributeOr(value, "maxOccurs", "1"), Facets: map[string]string{}}
 						parsed.XSDComponents = append(parsed.XSDComponents, component)
 						componentAtDepth[depth] = len(parsed.XSDComponents) - 1
 					}
@@ -482,6 +516,10 @@ func parseXMLDocument(body []byte, limits Limits) (parsedDocument, *stopError) {
 				}
 			}
 		case xml.EndElement:
+			if depth == currentMessageDepth {
+				currentMessage = ""
+				currentMessageDepth = 0
+			}
 			if depth == currentPTOperationDepth {
 				currentPTOperation = ""
 				currentPTOperationDepth = 0
@@ -539,20 +577,62 @@ func referenceAttribute(value xml.StartElement) (string, string, bool) {
 	return "", "", false
 }
 
-func buildContract(manifest Manifest, credentials Credentials, documents map[string]*rawDocument, key []byte) (*ContractSummary, *stopError) {
-	var selected parsedDocument
-	found := false
-	for _, doc := range documents {
-		if _, ok := doc.Parsed.Services[manifest.ExpectedServiceQName]; ok {
-			selected = doc.Parsed
-			found = true
-			break
+func buildContract(manifest Manifest, documents map[string]*rawDocument, key []byte) (*ContractSummary, *stopError) {
+	services := map[string][]portInfo{}
+	bindings := map[string]bindingInfo{}
+	portTypes := map[string]map[string]operationInfo{}
+	messages := map[string][]MessagePart{}
+	componentIndex := map[string]XSDComponent{}
+	targets := []string{}
+	assertions := []string{}
+	components := []XSDComponent{}
+	for _, uri := range sortedDocumentURIs(documents) {
+		parsed := documents[uri].Parsed
+		if parsed.TargetNamespace != "" {
+			targets = append(targets, sanitizeValue(parsed.TargetNamespace, manifest, key))
+		}
+		assertions = append(assertions, sanitizeStrings(parsed.PolicyAssertions, manifest, key)...)
+		for name, value := range parsed.Services {
+			if existing, ok := services[name]; ok && !reflect.DeepEqual(existing, value) {
+				return nil, stop("contract", "CONTRACT_CONFLICT", "WSDL service definitions conflict")
+			}
+			services[name] = value
+		}
+		for name, value := range parsed.Bindings {
+			if existing, ok := bindings[name]; ok && !reflect.DeepEqual(existing, value) {
+				return nil, stop("contract", "CONTRACT_CONFLICT", "WSDL binding definitions conflict")
+			}
+			bindings[name] = value
+		}
+		for name, value := range parsed.PortTypes {
+			if existing, ok := portTypes[name]; ok && !reflect.DeepEqual(existing, value) {
+				return nil, stop("contract", "CONTRACT_CONFLICT", "WSDL portType definitions conflict")
+			}
+			portTypes[name] = value
+		}
+		for name, value := range parsed.Messages {
+			if existing, ok := messages[name]; ok && !reflect.DeepEqual(existing, value) {
+				return nil, stop("contract", "CONTRACT_CONFLICT", "WSDL message definitions conflict")
+			}
+			messages[name] = value
+		}
+		for _, component := range parsed.XSDComponents {
+			componentKey := xsdComponentKey(component)
+			if existing, ok := componentIndex[componentKey]; ok {
+				if !reflect.DeepEqual(existing, component) {
+					return nil, stop("contract", "CONTRACT_CONFLICT", "XSD component definitions conflict")
+				}
+				continue
+			}
+			componentIndex[componentKey] = component
+			components = append(components, sanitizeComponents([]XSDComponent{component}, manifest, key)[0])
 		}
 	}
+
+	ports, found := services[manifest.ExpectedServiceQName]
 	if !found {
 		return nil, stop("contract", "CONTRACT_MISMATCH", "expected WSDL service was not found")
 	}
-	ports := selected.Services[manifest.ExpectedServiceQName]
 	var port portInfo
 	for _, candidate := range ports {
 		if candidate.Name == manifest.ExpectedPortQName {
@@ -563,7 +643,7 @@ func buildContract(manifest Manifest, credentials Credentials, documents map[str
 	if port.Name == "" || port.BindingQName != manifest.ExpectedBindingQName {
 		return nil, stop("contract", "CONTRACT_MISMATCH", "expected WSDL port or binding was not found")
 	}
-	binding, ok := selected.Bindings[manifest.ExpectedBindingQName]
+	binding, ok := bindings[manifest.ExpectedBindingQName]
 	if !ok {
 		return nil, stop("contract", "CONTRACT_MISMATCH", "expected WSDL binding was not found")
 	}
@@ -571,7 +651,7 @@ func buildContract(manifest Manifest, credentials Credentials, documents map[str
 	if !ok || action != manifest.ExpectedSOAPAction {
 		return nil, stop("contract", "CONTRACT_MISMATCH", "expected WSDL operation or SOAP action did not match")
 	}
-	operations := selected.PortTypes[binding.TypeQName]
+	operations := portTypes[binding.TypeQName]
 	operation, ok := operations[manifest.ExpectedOperation]
 	if !ok || operation.Input == "" {
 		return nil, stop("contract", "CONTRACT_MISMATCH", "expected WSDL message exchange was not found")
@@ -587,19 +667,31 @@ func buildContract(manifest Manifest, credentials Credentials, documents map[str
 		output = &value
 		exchange = "request-response"
 	}
-	targets := []string{}
-	components := []XSDComponent{}
-	assertions := []string{}
-	for _, doc := range documents {
-		if doc.Parsed.TargetNamespace != "" {
-			targets = append(targets, sanitizeValue(doc.Parsed.TargetNamespace, manifest, key))
+	referencedMessages := append([]string{operation.Input}, operation.Faults...)
+	if operation.Output != "" {
+		referencedMessages = append(referencedMessages, operation.Output)
+	}
+	messageSummaries := make([]MessageSummary, 0, len(referencedMessages))
+	for _, messageQName := range uniqueSorted(referencedMessages) {
+		parts, ok := messages[messageQName]
+		if !ok {
+			return nil, stop("contract", "CONTRACT_MISMATCH", "referenced WSDL message definition was not found")
 		}
-		components = append(components, sanitizeComponents(doc.Parsed.XSDComponents, manifest, key)...)
-		assertions = append(assertions, sanitizeStrings(doc.Parsed.PolicyAssertions, manifest, key)...)
+		sanitizedParts := make([]MessagePart, 0, len(parts))
+		for _, part := range parts {
+			sanitizedParts = append(sanitizedParts, MessagePart{Name: sanitizeValue(part.Name, manifest, key), ElementQName: sanitizeValue(part.ElementQName, manifest, key), TypeQName: sanitizeValue(part.TypeQName, manifest, key)})
+		}
+		messageSummaries = append(messageSummaries, MessageSummary{QName: sanitizeValue(messageQName, manifest, key), Parts: sanitizedParts})
 	}
 	sort.Slice(components, func(i, j int) bool {
 		if components[i].Namespace != components[j].Namespace {
 			return components[i].Namespace < components[j].Namespace
+		}
+		if components[i].ParentQName != components[j].ParentQName {
+			return components[i].ParentQName < components[j].ParentQName
+		}
+		if components[i].Order != components[j].Order {
+			return components[i].Order < components[j].Order
 		}
 		if components[i].Name != components[j].Name {
 			return components[i].Name < components[j].Name
@@ -613,8 +705,24 @@ func buildContract(manifest Manifest, credentials Credentials, documents map[str
 		SOAPVersion: soapVersion, Operation: manifest.ExpectedOperation, InputMessageQName: sanitizeValue(operation.Input, manifest, key), OutputMessageQName: output,
 		FaultMessageQNames: uniqueSorted(sanitizeStrings(operation.Faults, manifest, key)), MessageExchange: exchange,
 		SOAPActionSHA256: hex.EncodeToString(actionDigest[:]), SOAPActionMatchesSealedExpected: true,
-		XSDComponents: components, PolicyAssertionQNames: uniqueSorted(assertions),
+		Messages: messageSummaries, XSDComponents: components, PolicyAssertionQNames: uniqueSorted(assertions),
 	}, nil
+}
+
+func sortedDocumentURIs(documents map[string]*rawDocument) []string {
+	result := make([]string, 0, len(documents))
+	for uri := range documents {
+		result = append(result, uri)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func xsdComponentKey(component XSDComponent) string {
+	if component.ParentQName == "" {
+		return component.Namespace + "\x00" + component.Kind + "\x00" + component.Name
+	}
+	return component.ParentQName + "\x00" + component.Kind + "\x00" + fmt.Sprintf("%08d", component.Order)
 }
 
 func normalizedFetchURI(raw string, base *url.URL, manifest Manifest) (string, error) {
@@ -623,6 +731,9 @@ func normalizedFetchURI(raw string, base *url.URL, manifest Manifest) (string, e
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil {
+		return "", err
+	}
+	if err := validateEscapedPath(parsed.EscapedPath()); err != nil {
 		return "", err
 	}
 	if base != nil {
@@ -635,7 +746,7 @@ func normalizedFetchURI(raw string, base *url.URL, manifest Manifest) (string, e
 	if parsed.Scheme != "https" && !(parsed.Scheme == "http" && isLoopbackHost(parsed.Hostname())) {
 		return "", fmt.Errorf("scheme forbidden")
 	}
-	if decoded, err := url.PathUnescape(parsed.EscapedPath()); err != nil || strings.Contains(decoded, "\\") || containsDotTraversal(decoded) {
+	if err := validateEscapedPath(parsed.EscapedPath()); err != nil {
 		return "", fmt.Errorf("path forbidden")
 	}
 	return parsed.String(), nil
@@ -677,6 +788,19 @@ func containsDotTraversal(path string) bool {
 		}
 	}
 	return false
+}
+
+func validateEscapedPath(path string) error {
+	decoded, err := url.PathUnescape(path)
+	if err != nil || strings.Contains(decoded, "\\") || containsDotTraversal(decoded) {
+		return fmt.Errorf("path forbidden")
+	}
+	for _, r := range decoded {
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf("path forbidden")
+		}
+	}
+	return nil
 }
 
 func documentID(key []byte, uri string) string { return "doc-" + hmacDigest(key, uri)[:32] }
@@ -744,6 +868,15 @@ func isFacet(local string) bool {
 	return false
 }
 
+func isXSD11OnlyElement(local string) bool {
+	switch local {
+	case "override", "assert", "assertion", "alternative", "openContent", "defaultOpenContent", "explicitTimezone":
+		return true
+	default:
+		return false
+	}
+}
+
 func canonicalEdges(edges []Edge) []Edge {
 	sort.Slice(edges, func(i, j int) bool {
 		left := edges[i].FromDocumentID + "\x00" + edges[i].ToDocumentID + "\x00" + edges[i].Relation
@@ -788,7 +921,7 @@ func sanitizeComponents(values []XSDComponent, manifest Manifest, key []byte) []
 		for name, facet := range value.Facets {
 			facets[name] = sanitizeValue(facet, manifest, key)
 		}
-		result = append(result, XSDComponent{Namespace: sanitizeValue(value.Namespace, manifest, key), Name: sanitizeValue(value.Name, manifest, key), Kind: value.Kind, Type: sanitizeValue(value.Type, manifest, key), MinOccurs: value.MinOccurs, MaxOccurs: value.MaxOccurs, Facets: facets})
+		result = append(result, XSDComponent{Namespace: sanitizeValue(value.Namespace, manifest, key), ParentQName: sanitizeValue(value.ParentQName, manifest, key), Name: sanitizeValue(value.Name, manifest, key), Kind: value.Kind, Order: value.Order, Type: sanitizeValue(value.Type, manifest, key), MinOccurs: value.MinOccurs, MaxOccurs: value.MaxOccurs, Facets: facets})
 	}
 	return result
 }
@@ -799,6 +932,53 @@ func sanitizeValue(value string, manifest Manifest, key []byte) string {
 		}
 	}
 	return value
+}
+
+func sanitizedDocumentSummary(documentID string, parsed parsedDocument, manifest Manifest, key []byte) map[string]interface{} {
+	services := map[string][]portInfo{}
+	for name, ports := range parsed.Services {
+		safePorts := make([]portInfo, 0, len(ports))
+		for _, port := range ports {
+			safePorts = append(safePorts, portInfo{Name: sanitizeValue(port.Name, manifest, key), BindingQName: sanitizeValue(port.BindingQName, manifest, key), SOAPVersion: port.SOAPVersion})
+		}
+		services[sanitizeValue(name, manifest, key)] = safePorts
+	}
+	bindings := map[string]interface{}{}
+	for name, binding := range parsed.Bindings {
+		actions := map[string]interface{}{}
+		for operation, action := range binding.Actions {
+			digest := sha256.Sum256([]byte(action))
+			actions[operation] = map[string]interface{}{"soap_action_sha256": hex.EncodeToString(digest[:]), "matches_sealed_expected": action == manifest.ExpectedSOAPAction}
+		}
+		bindings[sanitizeValue(name, manifest, key)] = map[string]interface{}{"type_qname": sanitizeValue(binding.TypeQName, manifest, key), "soap_version": binding.SOAPVersion, "operations": actions}
+	}
+	portTypes := map[string]interface{}{}
+	for name, operations := range parsed.PortTypes {
+		safeOperations := map[string]interface{}{}
+		for operationName, operation := range operations {
+			safeOperations[operationName] = map[string]interface{}{"input": sanitizeValue(operation.Input, manifest, key), "output": sanitizeValue(operation.Output, manifest, key), "faults": sanitizeStrings(operation.Faults, manifest, key)}
+		}
+		portTypes[sanitizeValue(name, manifest, key)] = safeOperations
+	}
+	messages := map[string][]MessagePart{}
+	for name, parts := range parsed.Messages {
+		safeParts := make([]MessagePart, 0, len(parts))
+		for _, part := range parts {
+			safeParts = append(safeParts, MessagePart{Name: sanitizeValue(part.Name, manifest, key), ElementQName: sanitizeValue(part.ElementQName, manifest, key), TypeQName: sanitizeValue(part.TypeQName, manifest, key)})
+		}
+		messages[sanitizeValue(name, manifest, key)] = safeParts
+	}
+	return map[string]interface{}{
+		"document_id":             documentID,
+		"kind":                    parsed.Kind,
+		"target_namespace":        sanitizeValue(parsed.TargetNamespace, manifest, key),
+		"services":                services,
+		"bindings":                bindings,
+		"port_types":              portTypes,
+		"messages":                messages,
+		"xsd_components":          sanitizeComponents(parsed.XSDComponents, manifest, key),
+		"policy_assertion_qnames": sanitizeStrings(parsed.PolicyAssertions, manifest, key),
+	}
 }
 
 func bundleLeak(manifest Manifest, credentials Credentials, bundle *Bundle) bool {

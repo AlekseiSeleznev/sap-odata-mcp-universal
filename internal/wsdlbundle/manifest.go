@@ -86,23 +86,34 @@ func isLoopbackHost(host string) bool {
 }
 
 func readPrivateJSON(path string, target interface{}, max int64) error {
+	return decodePrivateJSON(path, target, max)
+}
+
+type privateFileError struct{ kind string }
+
+func (e *privateFileError) Error() string { return "private file " + e.kind }
+
+func decodePrivateJSON(path string, target interface{}, max int64) error {
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
-		return fmt.Errorf("PRIVATE_FILE_UNAVAILABLE")
+	if err != nil {
+		return &privateFileError{kind: "unavailable"}
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return &privateFileError{kind: "unsafe"}
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("PRIVATE_FILE_UNAVAILABLE")
+		return &privateFileError{kind: "unavailable"}
 	}
 	defer file.Close()
 	decoder := json.NewDecoder(io.LimitReader(file, max))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
-		return fmt.Errorf("PRIVATE_FILE_INVALID")
+		return &privateFileError{kind: "invalid"}
 	}
 	var extra interface{}
 	if err := decoder.Decode(&extra); err != io.EOF {
-		return fmt.Errorf("PRIVATE_FILE_INVALID")
+		return &privateFileError{kind: "invalid"}
 	}
 	return nil
 }

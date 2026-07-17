@@ -85,8 +85,8 @@ func (r *HierarchicalRuntime) ApplySystem(ctx context.Context, system SystemInfo
 	r.clientCache = make(map[string]*client.ODataClient)
 	r.metadataCache = make(map[string]*models.ODataMetadata)
 	r.serviceCacheKeys = make(map[string]string)
-	r.activeSystem = system.ID
-	r.activeAccess = normalizeAccessMode(system.AccessMode)
+	r.activeSystem = ""
+	r.activeAccess = ""
 	r.mu.Unlock()
 
 	usedNames := make(map[string]struct{})
@@ -125,6 +125,10 @@ func (r *HierarchicalRuntime) ApplySystem(ctx context.Context, system SystemInfo
 		}
 	}
 
+	r.mu.Lock()
+	r.activeSystem = system.ID
+	r.activeAccess = normalizeAccessMode(system.AccessMode)
+	r.mu.Unlock()
 	return nil
 }
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestServiceStopsBeforePermitAndTransportOnManifestMismatch(t *testing.T) {
@@ -33,7 +34,7 @@ func TestServiceStopsBeforePermitAndTransportOnManifestMismatch(t *testing.T) {
 }
 
 func TestServiceStopsBeforeTransportOnPermitMismatch(t *testing.T) {
-	ledger := &fixtureLedger{err: fmt.Errorf("PERMIT_MISMATCH")}
+	ledger := &fixtureLedger{err: permitError("PERMIT_MISMATCH")}
 	var transportFactories atomic.Int32
 	service, input := fixtureService(t, ledger, func(context.Context, Manifest) (http.RoundTripper, error) {
 		transportFactories.Add(1)
@@ -84,7 +85,11 @@ func TestServiceRejectsUnsafeXMLDialectsAndCrossOriginReferences(t *testing.T) {
 		{"doctype", "XML_UNSAFE", `<!DOCTYPE definitions [<!ENTITY x "boom">]><wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"/>`},
 		{"xinclude", "XML_UNSAFE", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="local.xml"/></wsdl:definitions>`},
 		{"wsdl 2", "UNSUPPORTED_DIALECT", `<description xmlns="http://www.w3.org/ns/wsdl"/>`},
+		{"xsd 1.1", "UNSUPPORTED_DIALECT", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"><xsd:assert test="true()"/></xsd:schema>`},
+		{"unknown policy dialect", "UNSUPPORTED_DIALECT", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:bad="urn:vendor:policy"><bad:Policy/></wsdl:definitions>`},
 		{"cross origin", "URI_POLICY_VIOLATION", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:x" location="https://other.invalid/private.wsdl"/></wsdl:definitions>`},
+		{"dot traversal", "URI_POLICY_VIOLATION", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:x" location="../private.wsdl"/></wsdl:definitions>`},
+		{"decoded control", "URI_POLICY_VIOLATION", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:x" location="/%0aprivate.wsdl"/></wsdl:definitions>`},
 		{"missing import", "REFERENCE_MISSING", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:x"/></wsdl:definitions>`},
 	}
 	for _, tc := range tests {
@@ -222,6 +227,32 @@ func TestServiceEnforcesPerDocumentAndWholeActionTimeouts(t *testing.T) {
 	})
 }
 
+func TestServiceHardStopsOnConflictingXSDComponents(t *testing.T) {
+	root := strings.Replace(minimalWSDL(), "</wsdl:definitions>", `<wsdl:types><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"><xsd:import namespace="urn:types" schemaLocation="/a.xsd"/><xsd:import namespace="urn:types" schemaLocation="/b.xsd"/></xsd:schema></wsdl:types></wsdl:definitions>`, 1)
+	var calls atomic.Int32
+	service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+		return roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			calls.Add(1)
+			body := root
+			if req.URL.Path == "/a.xsd" {
+				body = `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:types"><xsd:complexType name="InvoiceType"><xsd:sequence><xsd:element name="Amount" type="xsd:string"/></xsd:sequence></xsd:complexType></xsd:schema>`
+			}
+			if req.URL.Path == "/b.xsd" {
+				body = `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:types"><xsd:complexType name="InvoiceType"><xsd:sequence><xsd:element name="Amount" type="xsd:decimal"/></xsd:sequence></xsd:complexType></xsd:schema>`
+			}
+			return responseRoundTrip(http.StatusOK, "application/xml", body)(req)
+		}), nil
+	}, nil)
+	result, err := service.Fetch(context.Background(), inputArgs(input))
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	assertHardStop(t, result, "CONTRACT_CONFLICT", true, 3)
+	if calls.Load() != 3 {
+		t.Fatalf("unexpected request count: %d", calls.Load())
+	}
+}
+
 func TestProductionLimitsRemainExact(t *testing.T) {
 	got := ProductionLimits()
 	if got.ConnectTimeoutMS != 5000 || got.TLSHandshakeTimeoutMS != 5000 || got.ResponseHeaderTimeoutMS != 10000 || got.PerDocumentTimeoutMS != 20000 || got.WholeActionTimeoutMS != 90000 || got.MaxDepth != 12 || got.MaxDocuments != 64 || got.MaxReferences != 256 || got.MaxDocumentBytes != 4*1024*1024 || got.MaxTotalBytes != 32*1024*1024 || got.MaxXMLTokens != 1_000_000 || got.MaxXMLNesting != 256 || got.MaxAttributes != 128 || got.MaxAttributeBytes != 64*1024 || got.MaxEvidenceBytes != 4*1024*1024 {
@@ -264,6 +295,27 @@ func TestStrictTransportPinsOneDNSResolutionAndIgnoresProxyEnvironment(t *testin
 	}
 }
 
+func TestStrictTransportConfiguresEveryNetworkTimeoutAndDisablesAutomaticBehavior(t *testing.T) {
+	manifest := productionFixtureManifest("https://gpi.invalid/invoice.wsdl?sap-client=100", t.TempDir())
+	transport, err := newStrictTransportWithResolver(context.Background(), manifest, func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}}, nil
+	})
+	if err != nil {
+		t.Fatalf("create strict transport: %v", err)
+	}
+	strict, ok := transport.(*strictRoundTripper)
+	if !ok {
+		t.Fatalf("unexpected transport type %T", transport)
+	}
+	configured := strict.transport
+	if strict.connectTimeout != 5*time.Second || configured.TLSHandshakeTimeout != 5*time.Second || configured.ResponseHeaderTimeout != 10*time.Second {
+		t.Fatalf("network timeouts drifted: connect=%s tls=%s headers=%s", strict.connectTimeout, configured.TLSHandshakeTimeout, configured.ResponseHeaderTimeout)
+	}
+	if configured.Proxy != nil || !configured.DisableKeepAlives || !configured.DisableCompression || configured.ForceAttemptHTTP2 || len(configured.TLSNextProto) != 0 {
+		t.Fatalf("automatic transport behavior is not disabled: %#v", configured)
+	}
+}
+
 func TestBundleDigestsAreDeterministicAcrossIndependentAttempts(t *testing.T) {
 	service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
 		return roundTripFunc(responseRoundTrip(http.StatusOK, "application/xml", minimalWSDL())), nil
@@ -301,6 +353,7 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { re
 func fixtureService(t *testing.T, ledger PermitLedger, factory func(context.Context, Manifest) (http.RoundTripper, error), limits *Limits) (*Service, Input) {
 	t.Helper()
 	manifest := productionFixtureManifest("https://gpi.invalid/invoice.wsdl?sap-client=100", t.TempDir())
+	manifest.ExpectedBindingQName = "{urn:employee-shop:invoice}InvoiceBinding"
 	if limits != nil {
 		manifest.Limits = *limits
 	}
@@ -308,7 +361,7 @@ func fixtureService(t *testing.T, ledger PermitLedger, factory func(context.Cont
 	if err != nil {
 		t.Fatalf("manifest digest: %v", err)
 	}
-	service, err := NewService(ServiceConfig{Manifest: manifest, ManifestSHA256: digest, Ledger: ledger, Credentials: Credentials{Username: "fixture-user", Password: "fixture-password"}, EvidenceKey: []byte("0123456789abcdef0123456789abcdef"), TransportFactory: factory})
+	service, err := NewService(ServiceConfig{ActiveSystemID: SystemID, Manifest: manifest, ManifestSHA256: digest, Ledger: ledger, Credentials: Credentials{Username: "fixture-user", Password: "fixture-password"}, EvidenceKey: []byte("0123456789abcdef0123456789abcdef"), TransportFactory: factory})
 	if err != nil {
 		t.Fatalf("service: %v", err)
 	}

@@ -65,6 +65,7 @@
 | **Ответы и диагностика** | `--pagination-hints`, `--response-metadata`, `--verbose-errors`, `--trace`, `--trace-mcp` |
 | **Большие сервисы** | `--universal` для одного универсального инструмента вместо сотен entity-tools |
 | **HTTP эксплуатация** | `/mcp`, `/health`, `/dashboard`, `/dashboard/docs`, API управления подключениями |
+| **Controlled WSDL evidence** | [`sap_wsdl_bundle_fetch_once`](docs/SAP_WSDL_BUNDLE_FETCH_ONCE.md): sealed GPI-only target, one-shot permit, recursive sanitized WSDL/XSD/policy closure |
 
 Ключевые особенности:
 
@@ -74,6 +75,7 @@
 - **Персистентный реестр систем**. Сохранённые профили лежат на диске и могут автоматически восстанавливаться после рестарта.
 - **Режим доступа на уровне системы**. Для каждой SAP-системы можно включать запись или принудительно возвращать ошибку при попытке записи.
 - **Совместимость с большими SAP сервисами**. `--universal` резко снижает число инструментов и токеновую нагрузку на MCP-клиент.
+- **Fail-closed WSDL evidence**. Узкий `sap_wsdl_bundle_fetch_once` виден в `tools/list`, но выполнить его можно только при активной identity `gpi_100`, exact sealed manifest и атомарно расходуемом permit; caller не передаёт URL, client или auth.
 
 ---
 

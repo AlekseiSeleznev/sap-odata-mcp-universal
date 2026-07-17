@@ -37,10 +37,12 @@ func TestSAPWSDLBundleFetchToolPublishesExactSchemas(t *testing.T) {
 
 	wantInput := readGoldenSchema(t, "testdata/sap_wsdl_bundle_fetch_once.input.schema.json")
 	wantOutput := readGoldenSchema(t, "testdata/sap_wsdl_bundle_fetch_once.output.schema.json")
+	matchCount := 0
 	for _, tool := range result.Tools {
 		if tool.Name != "sap_wsdl_bundle_fetch_once" {
 			continue
 		}
+		matchCount++
 		if !reflect.DeepEqual(tool.InputSchema, wantInput) {
 			t.Fatalf("inputSchema mismatch\n got: %#v\nwant: %#v", tool.InputSchema, wantInput)
 		}
@@ -50,12 +52,13 @@ func TestSAPWSDLBundleFetchToolPublishesExactSchemas(t *testing.T) {
 		if got := schemaDigest(t, tool.InputSchema); got != "94dd1a4f23157cd0076a685b8104d2cddec090fec99b6fc1a624cbc334007ea2" {
 			t.Fatalf("inputSchema canonical digest drifted: %s", got)
 		}
-		if got := schemaDigest(t, tool.OutputSchema); got != "391984c900fe9dcb3fa2560fd733ecd517edc3b77d190e40202c359eba590af4" {
+		if got := schemaDigest(t, tool.OutputSchema); got != "830eac4337883bc0fb9e025fedce94ed2416a8ae949fa21e193fda082adc1ad6" {
 			t.Fatalf("outputSchema canonical digest drifted: %s", got)
 		}
-		return
 	}
-	t.Fatal("tool sap_wsdl_bundle_fetch_once was not listed")
+	if matchCount != 1 {
+		t.Fatalf("tool sap_wsdl_bundle_fetch_once listed %d times, want exactly once", matchCount)
+	}
 }
 
 func TestSAPWSDLBundleFetchToolFailsClosedWithoutSealedConfiguration(t *testing.T) {
@@ -64,7 +67,8 @@ func TestSAPWSDLBundleFetchToolFailsClosedWithoutSealedConfiguration(t *testing.
 	if err != nil {
 		t.Fatalf("create bridge: %v", err)
 	}
-	NewHierarchicalRuntime(odataBridge, config.Config{})
+	runtime := NewHierarchicalRuntime(odataBridge, config.Config{})
+	runtime.activeSystem = "gpi_100"
 	response := handleMCPRequest(t, odataBridge, "tools/call", map[string]interface{}{
 		"name": "sap_wsdl_bundle_fetch_once",
 		"arguments": map[string]interface{}{
@@ -93,6 +97,42 @@ func TestSAPWSDLBundleFetchToolFailsClosedWithoutSealedConfiguration(t *testing.
 	got := result.StructuredContent
 	if got.Outcome != "HARD_STOP" || got.PermitConsumed || got.NetworkGetsStarted != 0 || got.HardStop.Code != "SEALED_CONFIG_UNAVAILABLE" {
 		t.Fatalf("unexpected configuration hard stop: %#v", got)
+	}
+}
+
+func TestSAPWSDLBundleFetchToolRequiresExactActiveGPIIdentityBeforeConfiguration(t *testing.T) {
+	t.Setenv("SAP_WSDL_BUNDLE_MANIFEST_FILE", "/path/that/must/not/be/read")
+	odataBridge, err := bridge.NewODataMCPBridge(&config.Config{})
+	if err != nil {
+		t.Fatalf("create bridge: %v", err)
+	}
+	runtime := NewHierarchicalRuntime(odataBridge, config.Config{})
+	runtime.activeSystem = "gpd_100"
+	response := handleMCPRequest(t, odataBridge, "tools/call", map[string]interface{}{
+		"name": "sap_wsdl_bundle_fetch_once",
+		"arguments": map[string]interface{}{
+			"system_id": "gpi_100", "contract_id": "employee-shop-invoice-wsdl",
+			"request_manifest_sha256": strings.Repeat("a", 64), "permit_id": "6ba7b810-9dad-41d1-80b4-00c04fd430c8",
+		},
+	})
+	if response.Error != nil {
+		t.Fatalf("identity mismatch should be a structured hard stop: %+v", response.Error)
+	}
+	var result struct {
+		StructuredContent struct {
+			NetworkGetsStarted int  `json:"network_gets_started"`
+			PermitConsumed     bool `json:"permit_consumed"`
+			HardStop           struct {
+				Code string `json:"code"`
+			} `json:"hard_stop"`
+		} `json:"structuredContent"`
+	}
+	if err := json.Unmarshal(response.Result, &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	got := result.StructuredContent
+	if got.HardStop.Code != "IDENTITY_MISMATCH" || got.PermitConsumed || got.NetworkGetsStarted != 0 {
+		t.Fatalf("unexpected identity hard stop: %#v", got)
 	}
 }
 

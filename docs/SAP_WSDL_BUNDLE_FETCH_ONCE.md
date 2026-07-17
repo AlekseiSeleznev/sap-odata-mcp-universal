@@ -16,6 +16,11 @@ The caller can provide only these four values:
 Raw URLs, SAP clients, credentials, headers, authentication modes, retry flags,
 and evidence paths are not accepted by the MCP schema.
 
+Before configuration is read, the handler checks the successfully activated
+dashboard runtime identity. Only exact `gpi_100` is accepted; an empty identity,
+GPD, or any other system returns `IDENTITY_MISMATCH` without permit or network
+I/O. A failed dashboard activation does not leave the identity set.
+
 ## Sealed server-side configuration
 
 Set `SAP_WSDL_BUNDLE_MANIFEST_FILE` to a private mode-`0600` JSON file. The
@@ -97,11 +102,22 @@ DNS result, the sealed origin only, `Accept-Encoding: identity`, no proxy,
 redirect, retry, keep-alive, HTTP/2, fallback, parameter rewrite, activation, or
 SOAP POST. Each unique normalized URI can reach `RoundTrip` at most once.
 
+Imported WSDL documents are resolved as one semantic symbol table: service,
+port, binding, portType, operation, input/output/fault messages, and message
+parts may live in separate documents. Duplicate WSDL or XSD definitions must be
+identical; conflicts hard-stop. XSD evidence retains parent, sequence order,
+cardinality, type, and facets.
+
 Only a complete sanitized bundle is atomically renamed into `evidence_dir`.
 Private origins are represented by keyed HMAC identifiers; raw XML, endpoints,
 credentials, headers, the SAP client, and raw SOAPAction are absent. SOAPAction
 is represented by SHA-256 plus a match flag. Every failure returns a sanitized
 `HARD_STOP` envelope and never publishes a partial bundle.
+
+`bundle_sha256` is exactly SHA-256 over the RFC 8785/JCS representation of
+`{root_document_id, sorted documents, sorted edges}`. Contract evidence is
+published alongside it but is deliberately not added to that fixed digest
+projection.
 
 ## Local pre-call gate
 
@@ -117,4 +133,4 @@ Before a separately approved live call:
 Reviewed canonical schema digests:
 
 - input: `94dd1a4f23157cd0076a685b8104d2cddec090fec99b6fc1a624cbc334007ea2`;
-- output: `391984c900fe9dcb3fa2560fd733ecd517edc3b77d190e40202c359eba590af4`.
+- output: `830eac4337883bc0fb9e025fedce94ed2416a8ae949fa21e193fda082adc1ad6`.

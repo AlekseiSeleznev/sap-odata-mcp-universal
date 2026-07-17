@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -22,13 +23,14 @@ type PermitLedger interface {
 }
 
 type ServiceConfig struct {
+	ActiveSystemID   string
 	Manifest         Manifest
 	ManifestSHA256   string
 	Ledger           PermitLedger
 	Credentials      Credentials
 	EvidenceKey      []byte
 	TransportFactory func(context.Context, Manifest) (http.RoundTripper, error)
-	AttemptID        func() string
+	AttemptID        func() (string, error)
 }
 
 type Service struct {
@@ -43,7 +45,7 @@ func NewService(config ServiceConfig) (*Service, error) {
 	if err != nil || computed != config.ManifestSHA256 {
 		return nil, fmt.Errorf("MANIFEST_DIGEST_MISMATCH")
 	}
-	if config.Ledger == nil || config.Credentials.Username == "" || config.Credentials.Password == "" || len(config.EvidenceKey) < 32 {
+	if config.ActiveSystemID != SystemID || config.Ledger == nil || config.Credentials.Username == "" || config.Credentials.Password == "" || len(config.EvidenceKey) < 32 {
 		return nil, fmt.Errorf("SERVICE_CONFIG_INVALID")
 	}
 	if config.AttemptID == nil {
@@ -60,11 +62,18 @@ func (s *Service) Fetch(ctx context.Context, args map[string]interface{}) (Resul
 	if err != nil {
 		return Result{}, err
 	}
-	return s.fetchInput(ctx, input), nil
+	attemptID, err := s.config.AttemptID()
+	if err != nil {
+		return Result{}, fmt.Errorf("ATTEMPT_ID_UNAVAILABLE")
+	}
+	return s.fetchInput(ctx, input, attemptID), nil
 }
 
-func (s *Service) fetchInput(ctx context.Context, input Input) Result {
-	result := baseResult(input, s.config.AttemptID())
+func (s *Service) fetchInput(ctx context.Context, input Input, attemptID string) Result {
+	result := baseResult(input, attemptID)
+	if s.config.ActiveSystemID != SystemID {
+		return hardStopResult(result, "identity", "IDENTITY_MISMATCH", "active runtime identity is not the sealed GPI system")
+	}
 	if input.RequestManifestSHA256 != s.config.ManifestSHA256 || input.SystemID != s.config.Manifest.SystemID || input.ContractID != s.config.Manifest.ContractID {
 		return hardStopResult(result, "manifest", "MANIFEST_MISMATCH", "sealed request manifest mismatch")
 	}
@@ -94,12 +103,19 @@ func (s *Service) fetchInput(ctx context.Context, input Input) Result {
 		return hardStopResult(result, stop.Phase, stop.Code, stop.Message)
 	}
 	result.Bundle = fetched.Bundle
+	result.Outcome = "COMPLETE"
+	placeholderDigest := zeroDigest
+	result.EvidenceManifestSHA256 = &placeholderDigest
+	if err := validateResult(result); err != nil {
+		result.Bundle = nil
+		result.EvidenceManifestSHA256 = nil
+		return hardStopResult(result, "output", "OUTPUT_SCHEMA_INVALID", "result failed its declared schema invariants")
+	}
 	digest, err := publishEvidence(s.config.Manifest, result.AttemptID, fetched.Bundle)
 	if err != nil {
 		result.Bundle = nil
 		return hardStopResult(result, "evidence", "ATOMIC_PUBLISH_FAILED", "sanitized evidence was not published")
 	}
-	result.Outcome = "COMPLETE"
 	result.EvidenceManifestSHA256 = &digest
 	if err := validateResult(result); err != nil {
 		result.Bundle = nil
@@ -130,10 +146,9 @@ func hardStopResult(result Result, phase, code, message string) Result {
 }
 
 func permitErrorCode(err error) string {
-	for _, code := range []string{"PERMIT_REPLAY", "PERMIT_MISMATCH", "PERMIT_UNAVAILABLE", "PERMIT_FILE_UNSAFE", "PERMIT_INVALID", "PERMIT_CONFIG_INVALID", "PERMIT_CONSUME_FAILED"} {
-		if strings.Contains(err.Error(), code) {
-			return code
-		}
+	var permitErr *PermitError
+	if errors.As(err, &permitErr) && stopCodePattern.MatchString(permitErr.Code) {
+		return permitErr.Code
 	}
 	return "PERMIT_REJECTED"
 }
@@ -142,14 +157,59 @@ func validateResult(result Result) error {
 	if result.SchemaVersion != "1.0" || !uuidV4Pattern.MatchString(result.AttemptID) || result.SystemID != SystemID || result.ContractID != ContractID || !lowerSHA256Pattern.MatchString(result.RequestManifestSHA256) || !lowerSHA256Pattern.MatchString(result.Identity.ConnectionBindingHMACSHA256) || result.NetworkGetsStarted < 0 || result.NetworkGetsStarted > 64 {
 		return fmt.Errorf("base result invariant failed")
 	}
+	if result.Identity.TLSPeerSHA256 != nil && !lowerSHA256Pattern.MatchString(*result.Identity.TLSPeerSHA256) {
+		return fmt.Errorf("TLS identity invariant failed")
+	}
 	if result.Outcome == "COMPLETE" {
-		if !result.PermitConsumed || result.NetworkGetsStarted < 1 || result.Bundle == nil || result.HardStop != nil || result.EvidenceManifestSHA256 == nil || !lowerSHA256Pattern.MatchString(*result.EvidenceManifestSHA256) {
+		if !result.Identity.MatchesSealedManifest || !result.PermitConsumed || result.NetworkGetsStarted < 1 || result.Bundle == nil || result.HardStop != nil || result.EvidenceManifestSHA256 == nil || !lowerSHA256Pattern.MatchString(*result.EvidenceManifestSHA256) || validateBundle(result.Bundle) != nil {
 			return fmt.Errorf("complete result invariant failed")
 		}
 		return nil
 	}
-	if result.Outcome != "HARD_STOP" || result.Bundle != nil || result.HardStop == nil || result.EvidenceManifestSHA256 != nil {
+	if result.Outcome != "HARD_STOP" || result.Bundle != nil || result.HardStop == nil || result.EvidenceManifestSHA256 != nil || result.HardStop.Phase == "" || result.HardStop.Message == "" || !stopCodePattern.MatchString(result.HardStop.Code) {
 		return fmt.Errorf("hard-stop result invariant failed")
+	}
+	return nil
+}
+
+func validateBundle(bundle *Bundle) error {
+	if bundle == nil || !bundle.Complete || !documentIDPattern.MatchString(bundle.RootDocumentID) || !lowerSHA256Pattern.MatchString(bundle.BundleSHA256) || len(bundle.Documents) < 1 || len(bundle.Documents) > 64 || len(bundle.Edges) > 256 {
+		return fmt.Errorf("bundle invariant failed")
+	}
+	for _, document := range bundle.Documents {
+		if !documentIDPattern.MatchString(document.DocumentID) || (document.Kind != "WSDL11" && document.Kind != "XSD10" && document.Kind != "WS_POLICY") || document.ByteCount < 1 || document.ByteCount > 4*1024*1024 || !lowerSHA256Pattern.MatchString(document.RawSHA256) || !lowerSHA256Pattern.MatchString(document.SanitizedSHA256) || !isXMLMediaType(document.MediaType) {
+			return fmt.Errorf("document invariant failed")
+		}
+	}
+	for _, edge := range bundle.Edges {
+		if !documentIDPattern.MatchString(edge.FromDocumentID) || !documentIDPattern.MatchString(edge.ToDocumentID) || (edge.Relation != "wsdl_import" && edge.Relation != "xsd_import" && edge.Relation != "xsd_include" && edge.Relation != "xsd_redefine" && edge.Relation != "policy_reference") {
+			return fmt.Errorf("edge invariant failed")
+		}
+	}
+	contract := bundle.Contract
+	if contract.WSDLVersion != "1.1" || contract.ServiceQName == "" || contract.PortQName == "" || contract.BindingQName == "" || (contract.SOAPVersion != "1.1" && contract.SOAPVersion != "1.2") || contract.Operation == "" || contract.InputMessageQName == "" || (contract.MessageExchange != "request-response" && contract.MessageExchange != "one-way") || !lowerSHA256Pattern.MatchString(contract.SOAPActionSHA256) || !contract.SOAPActionMatchesSealedExpected {
+		return fmt.Errorf("contract invariant failed")
+	}
+	if contract.MessageExchange == "request-response" && contract.OutputMessageQName == nil {
+		return fmt.Errorf("message exchange invariant failed")
+	}
+	if contract.MessageExchange == "one-way" && contract.OutputMessageQName != nil {
+		return fmt.Errorf("message exchange invariant failed")
+	}
+	for _, message := range contract.Messages {
+		if message.QName == "" {
+			return fmt.Errorf("message invariant failed")
+		}
+		for _, part := range message.Parts {
+			if part.Name == "" || (part.ElementQName == "" && part.TypeQName == "") {
+				return fmt.Errorf("message part invariant failed")
+			}
+		}
+	}
+	for _, component := range contract.XSDComponents {
+		if component.Namespace == "" || component.Name == "" || (component.Kind != "element" && component.Kind != "complexType" && component.Kind != "simpleType") || component.Order < 0 || component.MinOccurs == "" || component.MaxOccurs == "" || component.Facets == nil {
+			return fmt.Errorf("XSD component invariant failed")
+		}
 	}
 	return nil
 }
@@ -160,32 +220,39 @@ func hmacDigest(key []byte, value string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func newUUIDv4() string {
+func newUUIDv4() (string, error) {
 	var value [16]byte
 	if _, err := rand.Read(value[:]); err != nil {
-		panic("crypto/rand unavailable")
+		return "", err
 	}
 	value[6] = (value[6] & 0x0f) | 0x40
 	value[8] = (value[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		value[0:4], value[4:6], value[6:8], value[8:10], value[10:16])
+		value[0:4], value[4:6], value[6:8], value[8:10], value[10:16]), nil
 }
 
-func FetchFromEnvironment(ctx context.Context, args map[string]interface{}) (Result, error) {
+func FetchFromEnvironment(ctx context.Context, args map[string]interface{}, activeSystemID string) (Result, error) {
 	input, err := ParseInput(args)
 	if err != nil {
 		return Result{}, err
 	}
-	attemptID := newUUIDv4()
-	service, err := loadEnvironmentService(attemptID)
+	attemptID, err := newUUIDv4()
+	if err != nil {
+		return Result{}, fmt.Errorf("ATTEMPT_ID_UNAVAILABLE")
+	}
+	if activeSystemID != SystemID {
+		result := baseResult(input, attemptID)
+		return hardStopResult(result, "identity", "IDENTITY_MISMATCH", "active runtime identity is not the sealed GPI system"), nil
+	}
+	service, err := loadEnvironmentService(attemptID, activeSystemID)
 	if err != nil {
 		result := baseResult(input, attemptID)
 		return hardStopResult(result, "configuration", "SEALED_CONFIG_UNAVAILABLE", "sealed WSDL fetch configuration is unavailable"), nil
 	}
-	return service.fetchInput(ctx, input), nil
+	return service.fetchInput(ctx, input, attemptID), nil
 }
 
-func loadEnvironmentService(attemptID string) (*Service, error) {
+func loadEnvironmentService(attemptID, activeSystemID string) (*Service, error) {
 	manifestPath := strings.TrimSpace(os.Getenv("SAP_WSDL_BUNDLE_MANIFEST_FILE"))
 	if manifestPath == "" {
 		return nil, fmt.Errorf("manifest path missing")
@@ -205,25 +272,26 @@ func loadEnvironmentService(attemptID string) (*Service, error) {
 	if err := readPrivateJSON(manifest.CredentialFile, &credentials, 16*1024); err != nil {
 		return nil, err
 	}
-	key, err := os.ReadFile(manifest.EvidenceHMACKeyFile)
-	if err != nil || len(key) < 32 {
-		return nil, fmt.Errorf("evidence key unavailable")
-	}
 	keyInfo, err := os.Lstat(manifest.EvidenceHMACKeyFile)
 	if err != nil || !keyInfo.Mode().IsRegular() || keyInfo.Mode().Perm()&0o077 != 0 {
 		return nil, fmt.Errorf("evidence key unsafe")
+	}
+	key, err := os.ReadFile(manifest.EvidenceHMACKeyFile)
+	if err != nil || len(key) < 32 {
+		return nil, fmt.Errorf("evidence key unavailable")
 	}
 	binarySHA, err := executableSHA256()
 	if err != nil {
 		return nil, err
 	}
 	return NewService(ServiceConfig{
+		ActiveSystemID: activeSystemID,
 		Manifest:       manifest,
 		ManifestSHA256: manifestSHA,
 		Ledger:         &FilePermitLedger{Dir: manifest.PermitDir, BinarySHA256: binarySHA},
 		Credentials:    credentials,
 		EvidenceKey:    key,
-		AttemptID:      func() string { return attemptID },
+		AttemptID:      func() (string, error) { return attemptID, nil },
 	})
 }
 

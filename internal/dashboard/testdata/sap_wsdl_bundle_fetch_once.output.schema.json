@@ -76,26 +76,52 @@
                 "message_exchange": {"type": "string", "enum": ["request-response", "one-way"]},
                 "soap_action_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
                 "soap_action_matches_sealed_expected": {"type": "boolean"},
+                "messages": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "qname": {"type": "string"},
+                      "parts": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {"type": "string"},
+                            "element_qname": {"type": "string"},
+                            "type_qname": {"type": "string"}
+                          },
+                          "required": ["name", "element_qname", "type_qname"],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": ["qname", "parts"],
+                    "additionalProperties": false
+                  }
+                },
                 "xsd_components": {
                   "type": "array",
                   "items": {
                     "type": "object",
                     "properties": {
                       "namespace": {"type": "string"},
+                      "parent_qname": {"type": "string"},
                       "name": {"type": "string"},
                       "kind": {"type": "string", "enum": ["element", "complexType", "simpleType"]},
+                      "order": {"type": "integer", "minimum": 0},
                       "type": {"type": "string"},
                       "min_occurs": {"type": "string"},
                       "max_occurs": {"type": "string"},
                       "facets": {"type": "object", "additionalProperties": {"type": "string"}}
                     },
-                    "required": ["namespace", "name", "kind", "type", "min_occurs", "max_occurs", "facets"],
+                    "required": ["namespace", "parent_qname", "name", "kind", "order", "type", "min_occurs", "max_occurs", "facets"],
                     "additionalProperties": false
                   }
                 },
                 "policy_assertion_qnames": {"type": "array", "items": {"type": "string"}}
               },
-              "required": ["wsdl_version", "target_namespaces", "service_qname", "port_qname", "binding_qname", "soap_version", "operation", "input_message_qname", "output_message_qname", "fault_message_qnames", "message_exchange", "soap_action_sha256", "soap_action_matches_sealed_expected", "xsd_components", "policy_assertion_qnames"],
+              "required": ["wsdl_version", "target_namespaces", "service_qname", "port_qname", "binding_qname", "soap_version", "operation", "input_message_qname", "output_message_qname", "fault_message_qnames", "message_exchange", "soap_action_sha256", "soap_action_matches_sealed_expected", "messages", "xsd_components", "policy_assertion_qnames"],
               "additionalProperties": false
             }
           },

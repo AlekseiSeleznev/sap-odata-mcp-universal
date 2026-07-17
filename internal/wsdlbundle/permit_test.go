@@ -12,6 +12,9 @@ import (
 
 func TestFilePermitLedgerConsumesExactlyOnceUnderRace(t *testing.T) {
 	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatalf("chmod ledger: %v", err)
+	}
 	now := time.Date(2026, 7, 17, 10, 0, 0, 0, time.UTC)
 	input := Input{
 		SystemID:              SystemID,
@@ -69,6 +72,9 @@ func TestFilePermitLedgerConsumesExactlyOnceUnderRace(t *testing.T) {
 
 func TestFilePermitLedgerRejectsMismatchWithoutConsumption(t *testing.T) {
 	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatalf("chmod ledger: %v", err)
+	}
 	now := time.Date(2026, 7, 17, 10, 0, 0, 0, time.UTC)
 	input := Input{
 		SystemID:              SystemID,

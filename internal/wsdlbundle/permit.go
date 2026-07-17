@@ -2,14 +2,19 @@ package wsdlbundle
 
 import (
 	"encoding/json"
-	"fmt"
-	"io"
+	"errors"
 	"os"
 	"path/filepath"
 	"time"
 )
 
 const permitPurpose = "WSDL_BUNDLE_READ"
+
+type PermitError struct{ Code string }
+
+func (e *PermitError) Error() string { return e.Code }
+
+func permitError(code string) error { return &PermitError{Code: code} }
 
 type Permit struct {
 	SchemaVersion         int       `json:"schema_version"`
@@ -31,7 +36,11 @@ type FilePermitLedger struct {
 
 func (l *FilePermitLedger) Consume(input Input) error {
 	if l == nil || l.Dir == "" || !lowerSHA256Pattern.MatchString(l.BinarySHA256) {
-		return fmt.Errorf("PERMIT_CONFIG_INVALID")
+		return permitError("PERMIT_CONFIG_INVALID")
+	}
+	dirInfo, err := os.Lstat(l.Dir)
+	if err != nil || !dirInfo.IsDir() || dirInfo.Mode().Perm()&0o077 != 0 {
+		return permitError("PERMIT_LEDGER_UNSAFE")
 	}
 	now := time.Now().UTC()
 	if l.Now != nil {
@@ -49,16 +58,16 @@ func (l *FilePermitLedger) Consume(input Input) error {
 		permit.RequestManifestSHA256 != input.RequestManifestSHA256 ||
 		permit.BinarySHA256 != l.BinarySHA256 ||
 		now.Before(permit.NotBefore) || !now.Before(permit.ExpiresAt) {
-		return fmt.Errorf("PERMIT_MISMATCH")
+		return permitError("PERMIT_MISMATCH")
 	}
 
 	markerPath := filepath.Join(l.Dir, input.PermitID+".consumed")
 	marker, err := os.OpenFile(markerPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		if os.IsExist(err) {
-			return fmt.Errorf("PERMIT_REPLAY")
+			return permitError("PERMIT_REPLAY")
 		}
-		return fmt.Errorf("PERMIT_CONSUME_FAILED")
+		return permitError("PERMIT_CONSUME_FAILED")
 	}
 	consumed := struct {
 		SchemaVersion int       `json:"schema_version"`
@@ -67,40 +76,42 @@ func (l *FilePermitLedger) Consume(input Input) error {
 	}{1, input.PermitID, now}
 	if err := json.NewEncoder(marker).Encode(consumed); err != nil {
 		_ = marker.Close()
-		return fmt.Errorf("PERMIT_CONSUME_FAILED")
+		return permitError("PERMIT_CONSUME_FAILED")
 	}
 	if err := marker.Sync(); err != nil {
 		_ = marker.Close()
-		return fmt.Errorf("PERMIT_CONSUME_FAILED")
+		return permitError("PERMIT_CONSUME_FAILED")
 	}
 	if err := marker.Close(); err != nil {
-		return fmt.Errorf("PERMIT_CONSUME_FAILED")
+		return permitError("PERMIT_CONSUME_FAILED")
+	}
+	directory, err := os.Open(l.Dir)
+	if err != nil {
+		return permitError("PERMIT_CONSUME_FAILED")
+	}
+	if err := directory.Sync(); err != nil {
+		_ = directory.Close()
+		return permitError("PERMIT_CONSUME_FAILED")
+	}
+	if err := directory.Close(); err != nil {
+		return permitError("PERMIT_CONSUME_FAILED")
 	}
 	return nil
 }
 
 func readPermit(path string) (Permit, error) {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return Permit{}, fmt.Errorf("PERMIT_UNAVAILABLE")
-	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
-		return Permit{}, fmt.Errorf("PERMIT_FILE_UNSAFE")
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return Permit{}, fmt.Errorf("PERMIT_UNAVAILABLE")
-	}
-	defer file.Close()
-	decoder := json.NewDecoder(io.LimitReader(file, 16*1024))
-	decoder.DisallowUnknownFields()
 	var permit Permit
-	if err := decoder.Decode(&permit); err != nil {
-		return Permit{}, fmt.Errorf("PERMIT_INVALID")
-	}
-	var extra interface{}
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return Permit{}, fmt.Errorf("PERMIT_INVALID")
+	if err := decodePrivateJSON(path, &permit, 16*1024); err != nil {
+		var privateErr *privateFileError
+		if errors.As(err, &privateErr) {
+			switch privateErr.kind {
+			case "unsafe":
+				return Permit{}, permitError("PERMIT_FILE_UNSAFE")
+			case "unavailable":
+				return Permit{}, permitError("PERMIT_UNAVAILABLE")
+			}
+		}
+		return Permit{}, permitError("PERMIT_INVALID")
 	}
 	return permit, nil
 }

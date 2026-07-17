@@ -40,23 +40,20 @@ func TestServiceFetchesRecursiveClosureOnceAndPublishesSanitizedAtomicEvidence(t
 		switch req.URL.Path {
 		case "/invoice.wsdl":
 			fmt.Fprintf(w, `<?xml version="1.0"?>
-<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:tns="urn:employee-shop:invoice" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" xmlns:wsp="http://www.w3.org/ns/ws-policy" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd" targetNamespace="urn:employee-shop:invoice">
+<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:tns="urn:employee-shop:invoice" xmlns:contract="urn:employee-shop:contract" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" xmlns:wsp="http://www.w3.org/ns/ws-policy" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd" targetNamespace="urn:employee-shop:invoice">
   <wsdl:types><xsd:schema targetNamespace="urn:employee-shop:invoice"><xsd:import namespace="urn:employee-shop:types" schemaLocation="/common.xsd"/></xsd:schema></wsdl:types>
-  <wsdl:import namespace="urn:employee-shop:extra" location="/extra.wsdl"/>
+  <wsdl:import namespace="urn:employee-shop:contract" location="/extra.wsdl"/>
   <wsp:Policy wsu:Id="local-policy"><wsp:ExactlyOne/></wsp:Policy>
   <wsp:PolicyReference URI="#local-policy"/>
   <wsp:PolicyReference URI="/policy.xml#transport-policy"/>
-  <wsdl:message name="InvoiceRequest"/><wsdl:message name="InvoiceResponse"/><wsdl:message name="InvoiceFault"/>
-  <wsdl:portType name="InvoicePortType"><wsdl:operation name="SubmitInvoice"><wsdl:input message="tns:InvoiceRequest"/><wsdl:output message="tns:InvoiceResponse"/><wsdl:fault name="InvoiceFault" message="tns:InvoiceFault"/></wsdl:operation></wsdl:portType>
-  <wsdl:binding name="InvoiceBinding" type="tns:InvoicePortType"><soap:binding transport="http://schemas.xmlsoap.org/soap/http" style="document"/><wsdl:operation name="SubmitInvoice"><soap:operation soapAction="%s"/></wsdl:operation></wsdl:binding>
-  <wsdl:service name="InvoiceService"><wsdl:port name="InvoicePort" binding="tns:InvoiceBinding"><soap:address location="%s/private-soap-endpoint"/></wsdl:port></wsdl:service>
-</wsdl:definitions>`, soapAction, server.URL)
+  <wsdl:service name="InvoiceService" wsp:PolicyURIs="/policy.xml#transport-policy"><wsdl:port name="InvoicePort" binding="contract:InvoiceBinding"><soap:address location="%s/private-soap-endpoint"/></wsdl:port></wsdl:service>
+</wsdl:definitions>`, server.URL)
 		case "/extra.wsdl":
-			fmt.Fprint(w, `<?xml version="1.0"?><wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:employee-shop:extra"><wsdl:types><xsd:schema targetNamespace="urn:employee-shop:extra"><xsd:import namespace="urn:employee-shop:types" schemaLocation="/common.xsd"/></xsd:schema></wsdl:types></wsdl:definitions>`)
+			fmt.Fprintf(w, `<?xml version="1.0"?><wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:tns="urn:employee-shop:contract" xmlns:types="urn:employee-shop:types" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" targetNamespace="urn:employee-shop:contract"><wsdl:types><xsd:schema targetNamespace="urn:employee-shop:contract"><xsd:import namespace="urn:employee-shop:types" schemaLocation="/common.xsd"/></xsd:schema></wsdl:types><wsdl:message name="InvoiceRequest"><wsdl:part name="parameters" element="types:InvoiceRequest"/></wsdl:message><wsdl:message name="InvoiceResponse"><wsdl:part name="parameters" element="types:InvoiceResponse"/></wsdl:message><wsdl:message name="InvoiceFault"><wsdl:part name="fault" element="types:InvoiceFault"/></wsdl:message><wsdl:portType name="InvoicePortType"><wsdl:operation name="SubmitInvoice"><wsdl:input message="tns:InvoiceRequest"/><wsdl:output message="tns:InvoiceResponse"/><wsdl:fault name="InvoiceFault" message="tns:InvoiceFault"/></wsdl:operation></wsdl:portType><wsdl:binding name="InvoiceBinding" type="tns:InvoicePortType"><soap:binding transport="http://schemas.xmlsoap.org/soap/http" style="document"/><wsdl:operation name="SubmitInvoice"><soap:operation soapAction="%s"/></wsdl:operation></wsdl:binding></wsdl:definitions>`, soapAction)
 		case "/common.xsd":
-			fmt.Fprint(w, `<?xml version="1.0"?><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:employee-shop:types"><xsd:include schemaLocation="/facets.xsd"/><xsd:complexType name="InvoiceType"><xsd:sequence><xsd:element name="Amount" type="xsd:decimal" minOccurs="1" maxOccurs="1"/></xsd:sequence></xsd:complexType></xsd:schema>`)
+			fmt.Fprint(w, `<?xml version="1.0"?><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:employee-shop:types"><xsd:include schemaLocation="/facets.xsd"/><xsd:complexType name="InvoiceType"><xsd:sequence><xsd:element name="Currency" type="xsd:string" minOccurs="1" maxOccurs="1"/><xsd:element name="Amount" type="xsd:decimal" minOccurs="1" maxOccurs="1"/></xsd:sequence></xsd:complexType></xsd:schema>`)
 		case "/facets.xsd":
-			fmt.Fprint(w, `<?xml version="1.0"?><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:employee-shop:types"><xsd:import namespace="urn:employee-shop:types" schemaLocation="/common.xsd"/><xsd:simpleType name="CurrencyCode"><xsd:restriction base="xsd:string"><xsd:length value="3"/><xsd:pattern value="[A-Z]{3}"/></xsd:restriction></xsd:simpleType></xsd:schema>`)
+			fmt.Fprint(w, `<?xml version="1.0"?><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:employee-shop:types"><xsd:redefine schemaLocation="/common.xsd"/><xsd:simpleType name="CurrencyCode"><xsd:restriction base="xsd:string"><xsd:length value="3"/><xsd:pattern value="[A-Z]{3}"/></xsd:restriction></xsd:simpleType></xsd:schema>`)
 		case "/policy.xml":
 			fmt.Fprint(w, `<?xml version="1.0"?><wsp:Policy xmlns:wsp="http://www.w3.org/ns/ws-policy" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd" xmlns:sp="http://docs.oasis-open.org/ws-sx/ws-securitypolicy/200702" wsu:Id="transport-policy"><sp:TransportBinding/></wsp:Policy>`)
 		default:
@@ -77,6 +74,7 @@ func TestServiceFetchesRecursiveClosureOnceAndPublishesSanitizedAtomicEvidence(t
 	writeFixturePermit(t, temp, input, binarySHA)
 
 	service, err := NewService(ServiceConfig{
+		ActiveSystemID: SystemID,
 		Manifest:       manifest,
 		ManifestSHA256: manifestSHA,
 		Ledger:         &FilePermitLedger{Dir: temp, BinarySHA256: binarySHA},
@@ -109,10 +107,10 @@ func TestServiceFetchesRecursiveClosureOnceAndPublishesSanitizedAtomicEvidence(t
 	countsMu.Unlock()
 
 	contract := result.Bundle.Contract
-	if contract.ServiceQName != "{urn:employee-shop:invoice}InvoiceService" || contract.PortQName != "{urn:employee-shop:invoice}InvoicePort" || contract.BindingQName != "{urn:employee-shop:invoice}InvoiceBinding" {
+	if contract.ServiceQName != "{urn:employee-shop:invoice}InvoiceService" || contract.PortQName != "{urn:employee-shop:invoice}InvoicePort" || contract.BindingQName != "{urn:employee-shop:contract}InvoiceBinding" {
 		t.Fatalf("service/port/binding proof missing: %#v", contract)
 	}
-	if contract.Operation != "SubmitInvoice" || contract.InputMessageQName != "{urn:employee-shop:invoice}InvoiceRequest" || contract.OutputMessageQName == nil || *contract.OutputMessageQName != "{urn:employee-shop:invoice}InvoiceResponse" || len(contract.FaultMessageQNames) != 1 {
+	if contract.Operation != "SubmitInvoice" || contract.InputMessageQName != "{urn:employee-shop:contract}InvoiceRequest" || contract.OutputMessageQName == nil || *contract.OutputMessageQName != "{urn:employee-shop:contract}InvoiceResponse" || len(contract.FaultMessageQNames) != 1 || len(contract.Messages) != 3 {
 		t.Fatalf("operation message proof missing: %#v", contract)
 	}
 	if !contract.SOAPActionMatchesSealedExpected || contract.SOAPActionSHA256 == "" || len(contract.PolicyAssertionQNames) != 1 {
@@ -120,6 +118,9 @@ func TestServiceFetchesRecursiveClosureOnceAndPublishesSanitizedAtomicEvidence(t
 	}
 	if !hasFacet(contract.XSDComponents, "CurrencyCode", "length", "3") || !hasFacet(contract.XSDComponents, "CurrencyCode", "pattern", "[A-Z]{3}") {
 		t.Fatalf("XSD facets missing: %#v", contract.XSDComponents)
+	}
+	if !hasOrderedElement(contract.XSDComponents, "{urn:employee-shop:types}InvoiceType", "Currency", 1) || !hasOrderedElement(contract.XSDComponents, "{urn:employee-shop:types}InvoiceType", "Amount", 2) {
+		t.Fatalf("XSD sequence order missing: %#v", contract.XSDComponents)
 	}
 
 	encoded, err := json.Marshal(result)
@@ -163,7 +164,7 @@ func productionFixtureManifest(rootURL, evidenceDir string) Manifest {
 		RootURL: rootURL, SAPClient: "100", AllowedOrigin: originOf(rootURL),
 		ExpectedServiceQName: "{urn:employee-shop:invoice}InvoiceService",
 		ExpectedPortQName:    "{urn:employee-shop:invoice}InvoicePort",
-		ExpectedBindingQName: "{urn:employee-shop:invoice}InvoiceBinding",
+		ExpectedBindingQName: "{urn:employee-shop:contract}InvoiceBinding",
 		ExpectedOperation:    "SubmitInvoice",
 		ExpectedSOAPAction:   "urn:private:employee-shop:invoice",
 		EvidenceDir:          evidenceDir,
@@ -173,6 +174,9 @@ func productionFixtureManifest(rootURL, evidenceDir string) Manifest {
 
 func writeFixturePermit(t *testing.T, dir string, input Input, binarySHA string) {
 	t.Helper()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatalf("chmod permit ledger: %v", err)
+	}
 	now := time.Now().UTC()
 	permit := Permit{SchemaVersion: 1, PermitID: input.PermitID, Purpose: permitPurpose, SystemID: input.SystemID, ContractID: input.ContractID, RequestManifestSHA256: input.RequestManifestSHA256, BinarySHA256: binarySHA, NotBefore: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute)}
 	body, err := json.Marshal(permit)
@@ -203,6 +207,15 @@ func totalCounts(counts map[string]int) int {
 func hasFacet(components []XSDComponent, name, facet, value string) bool {
 	for _, component := range components {
 		if component.Name == name && component.Facets[facet] == value {
+			return true
+		}
+	}
+	return false
+}
+
+func hasOrderedElement(components []XSDComponent, parent, name string, order int) bool {
+	for _, component := range components {
+		if component.ParentQName == parent && component.Name == name && component.Order == order {
 			return true
 		}
 	}

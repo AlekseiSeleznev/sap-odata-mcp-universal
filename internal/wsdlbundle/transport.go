@@ -11,6 +11,15 @@ import (
 	"time"
 )
 
+type strictRoundTripper struct {
+	transport      *http.Transport
+	connectTimeout time.Duration
+}
+
+func (s *strictRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return s.transport.RoundTrip(request)
+}
+
 func newStrictTransport(ctx context.Context, manifest Manifest) (http.RoundTripper, error) {
 	return newStrictTransportWithResolver(ctx, manifest, net.DefaultResolver.LookupIPAddr)
 }
@@ -48,7 +57,7 @@ func newStrictTransportWithResolver(ctx context.Context, manifest Manifest, reso
 		return dialer.DialContext(dialCtx, network, net.JoinHostPort(pinned.String(), port))
 	}
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: host}
-	return &http.Transport{
+	transport := &http.Transport{
 		Proxy:                 nil,
 		DialContext:           dialContext,
 		ForceAttemptHTTP2:     false,
@@ -59,5 +68,6 @@ func newStrictTransportWithResolver(ctx context.Context, manifest Manifest, reso
 		DisableCompression:    true,
 		DisableKeepAlives:     true,
 		MaxIdleConns:          0,
-	}, nil
+	}
+	return &strictRoundTripper{transport: transport, connectTimeout: dialer.Timeout}, nil
 }
