@@ -373,7 +373,7 @@ func (r *HierarchicalRuntime) currentAccessMode(systemID string) string {
 	if r.activeSystem == systemID && r.activeAccess != "" {
 		return r.activeAccess
 	}
-	return "unrestricted"
+	return "restricted"
 }
 
 func cacheKey(system SystemInfo, service ServiceInfo) string {

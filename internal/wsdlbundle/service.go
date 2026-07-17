@@ -102,6 +102,9 @@ func (s *Service) fetchInput(ctx context.Context, input Input, attemptID string)
 	if stop != nil {
 		return hardStopResult(result, stop.Phase, stop.Code, stop.Message)
 	}
+	if actionCtx.Err() != nil {
+		return hardStopResult(result, "timeout", "WHOLE_ACTION_TIMEOUT", "whole-action timeout reached")
+	}
 	result.Bundle = fetched.Bundle
 	result.Outcome = "COMPLETE"
 	placeholderDigest := zeroDigest
@@ -111,9 +114,12 @@ func (s *Service) fetchInput(ctx context.Context, input Input, attemptID string)
 		result.EvidenceManifestSHA256 = nil
 		return hardStopResult(result, "output", "OUTPUT_SCHEMA_INVALID", "result failed its declared schema invariants")
 	}
-	digest, err := publishEvidence(s.config.Manifest, result.AttemptID, fetched.Bundle)
+	digest, err := publishEvidence(actionCtx, s.config.Manifest, result.AttemptID, fetched.Bundle)
 	if err != nil {
 		result.Bundle = nil
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return hardStopResult(result, "timeout", "WHOLE_ACTION_TIMEOUT", "whole-action timeout reached")
+		}
 		return hardStopResult(result, "evidence", "ATOMIC_PUBLISH_FAILED", "sanitized evidence was not published")
 	}
 	result.EvidenceManifestSHA256 = &digest
@@ -209,6 +215,11 @@ func validateBundle(bundle *Bundle) error {
 	for _, component := range contract.XSDComponents {
 		if component.Namespace == "" || component.Name == "" || (component.Kind != "element" && component.Kind != "complexType" && component.Kind != "simpleType") || component.Order < 0 || component.MinOccurs == "" || component.MaxOccurs == "" || component.Facets == nil {
 			return fmt.Errorf("XSD component invariant failed")
+		}
+		for _, facet := range component.Facets {
+			if facet.Name == "" {
+				return fmt.Errorf("XSD facet invariant failed")
+			}
 		}
 	}
 	return nil
@@ -308,7 +319,10 @@ func executableSHA256() (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
-func publishEvidence(manifest Manifest, attemptID string, bundle *Bundle) (string, error) {
+func publishEvidence(ctx context.Context, manifest Manifest, attemptID string, bundle *Bundle) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if bundle == nil {
 		return "", fmt.Errorf("bundle missing")
 	}
@@ -340,6 +354,9 @@ func publishEvidence(manifest Manifest, attemptID string, bundle *Bundle) (strin
 	if _, err := temp.Write(body); err != nil {
 		return "", err
 	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if err := temp.Sync(); err != nil {
 		return "", err
 	}
@@ -348,6 +365,10 @@ func publishEvidence(manifest Manifest, attemptID string, bundle *Bundle) (strin
 	}
 	finalName := filepath.Join(manifest.EvidenceDir, attemptID+".json")
 	if err := os.Rename(tempName, finalName); err != nil {
+		return "", err
+	}
+	if err := ctx.Err(); err != nil {
+		_ = os.Remove(finalName)
 		return "", err
 	}
 	dir, err := os.Open(manifest.EvidenceDir)
@@ -361,6 +382,10 @@ func publishEvidence(manifest Manifest, attemptID string, bundle *Bundle) (strin
 		return "", err
 	}
 	if err := dir.Close(); err != nil {
+		_ = os.Remove(finalName)
+		return "", err
+	}
+	if err := ctx.Err(); err != nil {
 		_ = os.Remove(finalName)
 		return "", err
 	}

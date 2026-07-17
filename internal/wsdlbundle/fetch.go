@@ -43,8 +43,9 @@ type fetchResult struct {
 }
 
 type queueItem struct {
-	URI   string
-	Depth int
+	URI                   string
+	Depth                 int
+	InheritedXSDNamespace string
 }
 
 type rawDocument struct {
@@ -57,8 +58,9 @@ type rawDocument struct {
 }
 
 type reference struct {
-	Raw      string
-	Relation string
+	Raw                   string
+	Relation              string
+	InheritedXSDNamespace string
 }
 
 type parsedDocument struct {
@@ -100,6 +102,7 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 	}
 	queue := []queueItem{{URI: root, Depth: 0}}
 	seen := map[string]bool{}
+	inheritedByURI := map[string]string{root: ""}
 	documents := map[string]*rawDocument{}
 	requiredFragments := map[string]map[string]bool{}
 	edges := make([]Edge, 0)
@@ -132,6 +135,25 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 				return result, stop("identity", "TLS_IDENTITY_CHANGED", "TLS peer identity changed inside one action")
 			}
 			result.TLSPeerSHA256 = tlsPeer
+		}
+		if item.InheritedXSDNamespace != "" && doc.Kind == "XSD10" {
+			if doc.Parsed.TargetNamespace != "" && doc.Parsed.TargetNamespace != item.InheritedXSDNamespace {
+				return result, stop("contract", "CONTRACT_CONFLICT", "included XSD target namespace conflicts with its parent schema")
+			}
+			doc.Parsed.TargetNamespace = item.InheritedXSDNamespace
+			for index := range doc.Parsed.XSDComponents {
+				if doc.Parsed.XSDComponents[index].Namespace == "" {
+					doc.Parsed.XSDComponents[index].Namespace = item.InheritedXSDNamespace
+					if doc.Parsed.XSDComponents[index].ParentQName != "" && !strings.HasPrefix(doc.Parsed.XSDComponents[index].ParentQName, "{") {
+						doc.Parsed.XSDComponents[index].ParentQName = qname(item.InheritedXSDNamespace, doc.Parsed.XSDComponents[index].ParentQName)
+					}
+				}
+			}
+			for index := range doc.Parsed.References {
+				if (doc.Parsed.References[index].Relation == "xsd_include" || doc.Parsed.References[index].Relation == "xsd_redefine") && doc.Parsed.References[index].InheritedXSDNamespace == "" {
+					doc.Parsed.References[index].InheritedXSDNamespace = item.InheritedXSDNamespace
+				}
+			}
 		}
 		totalBytes += int64(len(doc.Raw))
 		if totalBytes > manifest.Limits.MaxTotalBytes {
@@ -170,8 +192,18 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 			}
 			targetID := documentID(evidenceKey, target)
 			edges = append(edges, Edge{FromDocumentID: doc.ID, ToDocumentID: targetID, Relation: ref.Relation})
+			loadedTarget := documents[target]
+			if loadedTarget != nil && loadedTarget.Parsed.TargetNamespace != "" {
+				if ref.InheritedXSDNamespace != "" && loadedTarget.Parsed.TargetNamespace != ref.InheritedXSDNamespace {
+					return result, stop("contract", "CONTRACT_CONFLICT", "included XSD target namespace conflicts with its parent schema")
+				}
+			} else if inherited, known := inheritedByURI[target]; known && inherited != ref.InheritedXSDNamespace {
+				return result, stop("contract", "CONTRACT_CONFLICT", "one XSD document was referenced with conflicting inherited namespaces")
+			} else if !known {
+				inheritedByURI[target] = ref.InheritedXSDNamespace
+			}
 			if !seen[target] {
-				queue = append(queue, queueItem{URI: target, Depth: item.Depth + 1})
+				queue = append(queue, queueItem{URI: target, Depth: item.Depth + 1, InheritedXSDNamespace: ref.InheritedXSDNamespace})
 			}
 		}
 	}
@@ -188,12 +220,15 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 		}
 	}
 
-	contract, contractStop := buildContract(manifest, documents, evidenceKey)
+	contract, contractStop := buildContract(ctx, manifest, documents, evidenceKey)
 	if contractStop != nil {
 		return result, contractStop
 	}
 	docEvidence := make([]DocumentEvidence, 0, len(documents))
 	for _, doc := range documents {
+		if ctx.Err() != nil {
+			return result, stop("timeout", "WHOLE_ACTION_TIMEOUT", "whole-action timeout reached")
+		}
 		rawDigest := sha256.Sum256(doc.Raw)
 		sanitized := sanitizedDocumentSummary(doc.ID, doc.Parsed, manifest, evidenceKey)
 		sanitizedBytes, err := json.Marshal(sanitized)
@@ -214,6 +249,9 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 		return result, stop("digest", "DIGEST_FAILED", "bundle digest failed")
 	}
 	bundle.BundleSHA256 = bundleSHA
+	if ctx.Err() != nil {
+		return result, stop("timeout", "WHOLE_ACTION_TIMEOUT", "whole-action timeout reached")
+	}
 	if leak := bundleLeak(manifest, credentials, bundle); leak {
 		return result, stop("sanitize", "SANITIZATION_FAILED", "forbidden private value remained in evidence")
 	}
@@ -277,8 +315,11 @@ func fetchDocument(ctx context.Context, rawURI string, manifest Manifest, creden
 	if len(body) == 0 || !utf8.Valid(body) {
 		return nil, nil, stop("xml", "XML_INVALID", "document is empty or not UTF-8")
 	}
-	parsed, parseStop := parseXMLDocument(body, manifest.Limits)
+	parsed, parseStop := parseXMLDocument(docCtx, body, manifest.Limits)
 	if parseStop != nil {
+		if ctx.Err() != nil {
+			return nil, nil, stop("timeout", "WHOLE_ACTION_TIMEOUT", "whole-action timeout reached")
+		}
 		return nil, nil, parseStop
 	}
 	var tlsPeer *string
@@ -294,7 +335,7 @@ func isXMLMediaType(mediaType string) bool {
 	return mediaType == "application/xml" || mediaType == "text/xml" || mediaType == "application/wsdl+xml" || mediaType == "application/xsd+xml" || strings.HasSuffix(mediaType, "+xml")
 }
 
-func parseXMLDocument(body []byte, limits Limits) (parsedDocument, *stopError) {
+func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDocument, *stopError) {
 	decoder := xml.NewDecoder(bytes.NewReader(body))
 	decoder.Strict = true
 	parsed := parsedDocument{IDs: map[string]bool{}, PortTypes: map[string]map[string]operationInfo{}, Bindings: map[string]bindingInfo{}, Services: map[string][]portInfo{}, Messages: map[string][]MessagePart{}}
@@ -310,9 +351,13 @@ func parseXMLDocument(body []byte, limits Limits) (parsedDocument, *stopError) {
 	var currentMessageDepth int
 	componentAtDepth := map[int]int{}
 	childOrder := map[int]int{}
+	schemaTargetAtDepth := map[int]string{}
 	policyDepth := 0
 
 	for {
+		if ctx.Err() != nil {
+			return parsed, stop("timeout", "DOCUMENT_TIMEOUT", "document processing timed out")
+		}
 		token, err := decoder.Token()
 		if err == io.EOF {
 			break
@@ -377,8 +422,13 @@ func parseXMLDocument(body []byte, limits Limits) (parsedDocument, *stopError) {
 					parsed.IDs[attr.Value] = true
 				}
 			}
-			if (value.Name.Space == wsdl11Namespace && value.Name.Local == "definitions") || (value.Name.Space == xsdNamespace && value.Name.Local == "schema") {
-				if target := attribute(value, "targetNamespace"); target != "" {
+			if value.Name.Space == wsdl11Namespace && value.Name.Local == "definitions" {
+				parsed.TargetNamespace = attribute(value, "targetNamespace")
+			}
+			if value.Name.Space == xsdNamespace && value.Name.Local == "schema" {
+				target := attribute(value, "targetNamespace")
+				schemaTargetAtDepth[depth] = target
+				if parsed.Kind == "XSD10" && depth == 1 {
 					parsed.TargetNamespace = target
 				}
 			}
@@ -387,7 +437,11 @@ func parseXMLDocument(body []byte, limits Limits) (parsedDocument, *stopError) {
 					return parsed, stop("xml", "REFERENCE_MISSING", "required XML reference is missing")
 				}
 				if strings.TrimSpace(ref) != "" {
-					parsed.References = append(parsed.References, reference{Raw: ref, Relation: relation})
+					inheritedNamespace := ""
+					if relation == "xsd_include" || relation == "xsd_redefine" {
+						inheritedNamespace, _ = nearestString(schemaTargetAtDepth, depth)
+					}
+					parsed.References = append(parsed.References, reference{Raw: ref, Relation: relation, InheritedXSDNamespace: inheritedNamespace})
 				}
 			}
 			if policyURIs := attribute(value, "PolicyURIs"); policyURIs != "" {
@@ -495,7 +549,8 @@ func parseXMLDocument(body []byte, limits Limits) (parsedDocument, *stopError) {
 							childOrder[parentIndex]++
 							order = childOrder[parentIndex]
 						}
-						component := XSDComponent{Namespace: parsed.TargetNamespace, ParentQName: parentQName, Name: name, Kind: value.Name.Local, Order: order, Type: expandQName(attribute(value, "type"), ns), MinOccurs: attributeOr(value, "minOccurs", "1"), MaxOccurs: attributeOr(value, "maxOccurs", "1"), Facets: map[string]string{}}
+						schemaTarget, _ := nearestString(schemaTargetAtDepth, depth)
+						component := XSDComponent{Namespace: schemaTarget, ParentQName: parentQName, Name: name, Kind: value.Name.Local, Order: order, Type: expandQName(attribute(value, "type"), ns), MinOccurs: attributeOr(value, "minOccurs", "1"), MaxOccurs: attributeOr(value, "maxOccurs", "1"), Facets: []XSDFacet{}}
 						parsed.XSDComponents = append(parsed.XSDComponents, component)
 						componentAtDepth[depth] = len(parsed.XSDComponents) - 1
 					}
@@ -510,7 +565,7 @@ func parseXMLDocument(body []byte, limits Limits) (parsedDocument, *stopError) {
 				if isFacet(value.Name.Local) {
 					if index, ok := nearestComponent(componentAtDepth, depth); ok {
 						component := parsed.XSDComponents[index]
-						component.Facets[value.Name.Local] = attribute(value, "value")
+						component.Facets = append(component.Facets, XSDFacet{Name: value.Name.Local, Value: attribute(value, "value")})
 						parsed.XSDComponents[index] = component
 					}
 				}
@@ -544,6 +599,7 @@ func parseXMLDocument(body []byte, limits Limits) (parsedDocument, *stopError) {
 				policyDepth = 0
 			}
 			delete(componentAtDepth, depth)
+			delete(schemaTargetAtDepth, depth)
 			if len(namespaces) > 1 {
 				namespaces = namespaces[:len(namespaces)-1]
 			}
@@ -577,7 +633,7 @@ func referenceAttribute(value xml.StartElement) (string, string, bool) {
 	return "", "", false
 }
 
-func buildContract(manifest Manifest, documents map[string]*rawDocument, key []byte) (*ContractSummary, *stopError) {
+func buildContract(ctx context.Context, manifest Manifest, documents map[string]*rawDocument, key []byte) (*ContractSummary, *stopError) {
 	services := map[string][]portInfo{}
 	bindings := map[string]bindingInfo{}
 	portTypes := map[string]map[string]operationInfo{}
@@ -586,7 +642,12 @@ func buildContract(manifest Manifest, documents map[string]*rawDocument, key []b
 	targets := []string{}
 	assertions := []string{}
 	components := []XSDComponent{}
+	xsdElements := map[string]bool{}
+	xsdTypes := map[string]bool{}
 	for _, uri := range sortedDocumentURIs(documents) {
+		if ctx.Err() != nil {
+			return nil, stop("timeout", "WHOLE_ACTION_TIMEOUT", "whole-action timeout reached")
+		}
 		parsed := documents[uri].Parsed
 		if parsed.TargetNamespace != "" {
 			targets = append(targets, sanitizeValue(parsed.TargetNamespace, manifest, key))
@@ -617,6 +678,9 @@ func buildContract(manifest Manifest, documents map[string]*rawDocument, key []b
 			messages[name] = value
 		}
 		for _, component := range parsed.XSDComponents {
+			if component.Namespace != "" {
+				targets = append(targets, sanitizeValue(component.Namespace, manifest, key))
+			}
 			componentKey := xsdComponentKey(component)
 			if existing, ok := componentIndex[componentKey]; ok {
 				if !reflect.DeepEqual(existing, component) {
@@ -625,6 +689,15 @@ func buildContract(manifest Manifest, documents map[string]*rawDocument, key []b
 				continue
 			}
 			componentIndex[componentKey] = component
+			if component.ParentQName == "" {
+				symbol := qname(component.Namespace, component.Name)
+				if component.Kind == "element" {
+					xsdElements[symbol] = true
+				}
+				if component.Kind == "complexType" || component.Kind == "simpleType" {
+					xsdTypes[symbol] = true
+				}
+			}
 			components = append(components, sanitizeComponents([]XSDComponent{component}, manifest, key)[0])
 		}
 	}
@@ -673,12 +746,24 @@ func buildContract(manifest Manifest, documents map[string]*rawDocument, key []b
 	}
 	messageSummaries := make([]MessageSummary, 0, len(referencedMessages))
 	for _, messageQName := range uniqueSorted(referencedMessages) {
+		if ctx.Err() != nil {
+			return nil, stop("timeout", "WHOLE_ACTION_TIMEOUT", "whole-action timeout reached")
+		}
 		parts, ok := messages[messageQName]
 		if !ok {
 			return nil, stop("contract", "CONTRACT_MISMATCH", "referenced WSDL message definition was not found")
 		}
 		sanitizedParts := make([]MessagePart, 0, len(parts))
 		for _, part := range parts {
+			if (part.ElementQName == "") == (part.TypeQName == "") {
+				return nil, stop("contract", "CONTRACT_MISMATCH", "WSDL message part must resolve exactly one element or type")
+			}
+			if part.ElementQName != "" && !xsdElements[part.ElementQName] {
+				return nil, stop("contract", "CONTRACT_MISMATCH", "WSDL message part element did not resolve in the XSD closure")
+			}
+			if part.TypeQName != "" && !xsdTypes[part.TypeQName] && !strings.HasPrefix(part.TypeQName, "{"+xsdNamespace+"}") {
+				return nil, stop("contract", "CONTRACT_MISMATCH", "WSDL message part type did not resolve in the XSD closure")
+			}
 			sanitizedParts = append(sanitizedParts, MessagePart{Name: sanitizeValue(part.Name, manifest, key), ElementQName: sanitizeValue(part.ElementQName, manifest, key), TypeQName: sanitizeValue(part.TypeQName, manifest, key)})
 		}
 		messageSummaries = append(messageSummaries, MessageSummary{QName: sanitizeValue(messageQName, manifest, key), Parts: sanitizedParts})
@@ -749,6 +834,26 @@ func normalizedFetchURI(raw string, base *url.URL, manifest Manifest) (string, e
 	if err := validateEscapedPath(parsed.EscapedPath()); err != nil {
 		return "", fmt.Errorf("path forbidden")
 	}
+	canonicalPath, err := canonicalPercentEncoding(parsed.EscapedPath())
+	if err != nil {
+		return "", fmt.Errorf("path forbidden")
+	}
+	decodedPath, err := url.PathUnescape(canonicalPath)
+	if err != nil {
+		return "", fmt.Errorf("path forbidden")
+	}
+	parsed.Path = decodedPath
+	parsed.RawPath = canonicalPath
+	parsed.RawQuery, err = canonicalPercentEncoding(parsed.RawQuery)
+	if err != nil {
+		return "", fmt.Errorf("query forbidden")
+	}
+	sealedOrigin, err := url.Parse(manifest.AllowedOrigin)
+	if err != nil {
+		return "", fmt.Errorf("origin invalid")
+	}
+	parsed.Scheme = sealedOrigin.Scheme
+	parsed.Host = sealedOrigin.Host
 	return parsed.String(), nil
 }
 
@@ -801,6 +906,56 @@ func validateEscapedPath(path string) error {
 		}
 	}
 	return nil
+}
+
+func canonicalPercentEncoding(value string) (string, error) {
+	const upperHex = "0123456789ABCDEF"
+	var canonical strings.Builder
+	canonical.Grow(len(value))
+	for index := 0; index < len(value); index++ {
+		if value[index] != '%' {
+			canonical.WriteByte(value[index])
+			continue
+		}
+		if index+2 >= len(value) {
+			return "", fmt.Errorf("truncated percent encoding")
+		}
+		high, ok := hexNibble(value[index+1])
+		if !ok {
+			return "", fmt.Errorf("invalid percent encoding")
+		}
+		low, ok := hexNibble(value[index+2])
+		if !ok {
+			return "", fmt.Errorf("invalid percent encoding")
+		}
+		decoded := high<<4 | low
+		if isURIUnreserved(decoded) {
+			canonical.WriteByte(decoded)
+		} else {
+			canonical.WriteByte('%')
+			canonical.WriteByte(upperHex[decoded>>4])
+			canonical.WriteByte(upperHex[decoded&0x0f])
+		}
+		index += 2
+	}
+	return canonical.String(), nil
+}
+
+func hexNibble(value byte) (byte, bool) {
+	switch {
+	case value >= '0' && value <= '9':
+		return value - '0', true
+	case value >= 'a' && value <= 'f':
+		return value - 'a' + 10, true
+	case value >= 'A' && value <= 'F':
+		return value - 'A' + 10, true
+	default:
+		return 0, false
+	}
+}
+
+func isURIUnreserved(value byte) bool {
+	return value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z' || value >= '0' && value <= '9' || value == '-' || value == '.' || value == '_' || value == '~'
 }
 
 func documentID(key []byte, uri string) string { return "doc-" + hmacDigest(key, uri)[:32] }
@@ -860,6 +1015,17 @@ func nearestComponent(active map[int]int, depth int) (int, bool) {
 	}
 	return index, bestDepth >= 0
 }
+func nearestString(active map[int]string, depth int) (string, bool) {
+	bestDepth := -1
+	value := ""
+	for candidateDepth, candidate := range active {
+		if candidateDepth <= depth && candidateDepth > bestDepth {
+			bestDepth = candidateDepth
+			value = candidate
+		}
+	}
+	return value, bestDepth >= 0
+}
 func isFacet(local string) bool {
 	switch local {
 	case "length", "minLength", "maxLength", "pattern", "enumeration", "minInclusive", "maxInclusive", "minExclusive", "maxExclusive", "totalDigits", "fractionDigits", "whiteSpace":
@@ -917,9 +1083,9 @@ func sanitizeStrings(values []string, manifest Manifest, key []byte) []string {
 func sanitizeComponents(values []XSDComponent, manifest Manifest, key []byte) []XSDComponent {
 	result := make([]XSDComponent, 0, len(values))
 	for _, value := range values {
-		facets := map[string]string{}
-		for name, facet := range value.Facets {
-			facets[name] = sanitizeValue(facet, manifest, key)
+		facets := make([]XSDFacet, 0, len(value.Facets))
+		for _, facet := range value.Facets {
+			facets = append(facets, XSDFacet{Name: facet.Name, Value: sanitizeValue(facet.Value, manifest, key)})
 		}
 		result = append(result, XSDComponent{Namespace: sanitizeValue(value.Namespace, manifest, key), ParentQName: sanitizeValue(value.ParentQName, manifest, key), Name: sanitizeValue(value.Name, manifest, key), Kind: value.Kind, Order: value.Order, Type: sanitizeValue(value.Type, manifest, key), MinOccurs: value.MinOccurs, MaxOccurs: value.MaxOccurs, Facets: facets})
 	}

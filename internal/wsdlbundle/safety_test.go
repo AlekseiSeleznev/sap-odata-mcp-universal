@@ -2,12 +2,15 @@ package wsdlbundle
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -293,6 +296,67 @@ func TestStrictTransportPinsOneDNSResolutionAndIgnoresProxyEnvironment(t *testin
 	if resolutions.Load() != 1 {
 		t.Fatalf("DNS resolved %d times, want exactly once", resolutions.Load())
 	}
+}
+
+func TestStrictTransportRejectsPlaintextLocalhostResolvedOutsideLoopback(t *testing.T) {
+	manifest := productionFixtureManifest("http://localhost:18080/invoice.wsdl?sap-client=100", t.TempDir())
+	_, err := newStrictTransportWithResolver(context.Background(), manifest, func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("192.0.2.10")}}, nil
+	})
+	if err == nil {
+		t.Fatal("plaintext localhost resolved outside loopback was accepted")
+	}
+}
+
+func TestParseXMLDocumentHonorsCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, stopped := parseXMLDocument(ctx, []byte(minimalWSDL()), ProductionLimits())
+	if stopped == nil || stopped.Code != "DOCUMENT_TIMEOUT" {
+		t.Fatalf("parse stop = %+v, want DOCUMENT_TIMEOUT", stopped)
+	}
+}
+
+func TestPublishEvidenceHonorsCanceledContextWithoutPublishing(t *testing.T) {
+	evidenceDir := filepath.Join(t.TempDir(), "evidence")
+	manifest := productionFixtureManifest("https://gpi.invalid/invoice.wsdl?sap-client=100", evidenceDir)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := publishEvidence(ctx, manifest, "6ba7b810-9dad-41d1-80b4-00c04fd430c8", &Bundle{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("publish error = %v, want context cancellation", err)
+	}
+	if entries, err := os.ReadDir(evidenceDir); err == nil && len(entries) != 0 {
+		t.Fatalf("canceled publish left %d evidence files", len(entries))
+	} else if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("inspect evidence dir: %v", err)
+	}
+}
+
+func TestNormalizedFetchURIDeduplicatesEscapedUnreservedPath(t *testing.T) {
+	manifest := productionFixtureManifest("https://gpi.invalid/invoice.wsdl?sap-client=100", t.TempDir())
+	plain, err := normalizedFetchURI("https://gpi.invalid/invoice.wsdl?sap-client=100", nil, manifest)
+	if err != nil {
+		t.Fatalf("normalize plain URI: %v", err)
+	}
+	escaped, err := normalizedFetchURI("https://gpi.invalid/%69nvoice.wsdl?sap-client=100", nil, manifest)
+	if err != nil {
+		t.Fatalf("normalize escaped URI: %v", err)
+	}
+	if plain != escaped {
+		t.Fatalf("equivalent URIs did not deduplicate: plain=%q escaped=%q", plain, escaped)
+	}
+}
+
+func TestServiceHardStopsWhenWSDLMessagePartDoesNotResolveInXSDClosure(t *testing.T) {
+	wsdl := strings.Replace(minimalWSDL(), `<wsdl:message name="InvoiceRequest"/>`, `<wsdl:message name="InvoiceRequest"><wsdl:part name="parameters" element="tns:MissingElement"/></wsdl:message>`, 1)
+	service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+		return roundTripFunc(responseRoundTrip(http.StatusOK, "application/xml", wsdl)), nil
+	}, nil)
+	result, err := service.Fetch(context.Background(), inputArgs(input))
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	assertHardStop(t, result, "CONTRACT_MISMATCH", true, 1)
 }
 
 func TestStrictTransportConfiguresEveryNetworkTimeoutAndDisablesAutomaticBehavior(t *testing.T) {

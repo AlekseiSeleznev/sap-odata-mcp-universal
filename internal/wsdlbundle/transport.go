@@ -48,6 +48,9 @@ func newStrictTransportWithResolver(ctx context.Context, manifest Manifest, reso
 		}
 		pinned = addresses[0].IP
 	}
+	if root.Scheme == "http" && !pinned.IsLoopback() {
+		return nil, fmt.Errorf("plaintext tunnel host did not resolve to loopback")
+	}
 	dialer := &net.Dialer{Timeout: time.Duration(manifest.Limits.ConnectTimeoutMS) * time.Millisecond}
 	dialContext := func(dialCtx context.Context, network, address string) (net.Conn, error) {
 		requestedHost, requestedPort, err := net.SplitHostPort(address)

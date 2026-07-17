@@ -113,7 +113,18 @@
                       "type": {"type": "string"},
                       "min_occurs": {"type": "string"},
                       "max_occurs": {"type": "string"},
-                      "facets": {"type": "object", "additionalProperties": {"type": "string"}}
+                      "facets": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {"type": "string"},
+                            "value": {"type": "string"}
+                          },
+                          "required": ["name", "value"],
+                          "additionalProperties": false
+                        }
+                      }
                     },
                     "required": ["namespace", "parent_qname", "name", "kind", "order", "type", "min_occurs", "max_occurs", "facets"],
                     "additionalProperties": false
