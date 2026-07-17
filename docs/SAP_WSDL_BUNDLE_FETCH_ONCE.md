@@ -108,6 +108,10 @@ parts may live in separate documents. Duplicate WSDL or XSD definitions must be
 identical; conflicts hard-stop. XSD evidence retains parent, sequence order,
 cardinality, type, and facets.
 
+The evidence model resolves simple-type `xsd:redefine`. Complex/group
+redefinitions and anonymous XSD types fail closed as `UNSUPPORTED_DIALECT`
+instead of publishing an approximate contract.
+
 Only a complete sanitized bundle is atomically renamed into `evidence_dir`.
 Private origins are represented by keyed HMAC identifiers; raw XML, endpoints,
 credentials, headers, the SAP client, and raw SOAPAction are absent. SOAPAction

@@ -432,6 +432,53 @@ func TestServiceHardStopsOnEveryUnresolvedXSDReferenceForm(t *testing.T) {
 	}
 }
 
+func TestParseXMLRejectsAmbiguousXSDDeclarations(t *testing.T) {
+	tests := []struct {
+		name string
+		xml  string
+		code string
+	}{
+		{"element name and ref", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:t" targetNamespace="urn:t"><xsd:element name="E" type="xsd:string"/><xsd:element name="Other" ref="tns:E"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"element ref and type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:t" targetNamespace="urn:t"><xsd:element name="E" type="xsd:string"/><xsd:element ref="tns:E" type="xsd:string"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"group name and ref", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:t" targetNamespace="urn:t"><xsd:group name="G"/><xsd:group name="Other" ref="tns:G"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"attribute group name and ref", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:t" targetNamespace="urn:t"><xsd:attributeGroup name="G"/><xsd:attributeGroup name="Other" ref="tns:G"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"attribute name and ref", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:t" targetNamespace="urn:t"><xsd:attribute name="A" type="xsd:string"/><xsd:attribute name="Other" ref="tns:A"/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
+		{"anonymous complex type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:element name="E"><xsd:complexType/></xsd:element></xsd:schema>`, "UNSUPPORTED_DIALECT"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, stopped := parseXMLDocument(context.Background(), []byte(tc.xml), ProductionLimits())
+			if stopped == nil || stopped.Code != tc.code {
+				t.Fatalf("parse stop = %+v, want %s", stopped, tc.code)
+			}
+		})
+	}
+}
+
+func TestServiceFailsClosedOnComplexTypeRedefine(t *testing.T) {
+	redefine := `<wsdl:types><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:employee-shop:invoice" targetNamespace="urn:employee-shop:invoice"><xsd:redefine schemaLocation="/base.xsd?sap-client=100"><xsd:complexType name="T"><xsd:complexContent><xsd:restriction base="tns:T"><xsd:sequence><xsd:element name="A" type="xsd:string"/></xsd:sequence></xsd:restriction></xsd:complexContent></xsd:complexType></xsd:redefine></xsd:schema></wsdl:types>`
+	root := strings.Replace(minimalWSDL(), `<wsdl:message name="InvoiceRequest"/>`, redefine+`<wsdl:message name="InvoiceRequest"/>`, 1)
+	var calls atomic.Int32
+	service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+		return roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			calls.Add(1)
+			body := root
+			if req.URL.Path == "/base.xsd" {
+				body = `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:employee-shop:invoice"><xsd:complexType name="T"><xsd:sequence><xsd:element name="A" type="xsd:string"/><xsd:element name="B" type="xsd:string"/></xsd:sequence></xsd:complexType></xsd:schema>`
+			}
+			return responseRoundTrip(http.StatusOK, "application/xml", body)(req)
+		}), nil
+	}, nil)
+	result, err := service.Fetch(context.Background(), inputArgs(input))
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	assertHardStop(t, result, "UNSUPPORTED_DIALECT", true, 2)
+	if calls.Load() != 2 {
+		t.Fatalf("transport attempts = %d, want 2", calls.Load())
+	}
+}
+
 func TestStrictTransportConfiguresEveryNetworkTimeoutAndDisablesAutomaticBehavior(t *testing.T) {
 	manifest := productionFixtureManifest("https://gpi.invalid/invoice.wsdl?sap-client=100", t.TempDir())
 	transport, err := newStrictTransportWithResolver(context.Background(), manifest, func(context.Context, string) ([]net.IPAddr, error) {

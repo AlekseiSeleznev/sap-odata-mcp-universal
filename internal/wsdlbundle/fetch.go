@@ -555,7 +555,15 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 				}
 				if isXSDComponentKind(value.Name.Local) {
 					name := attribute(value, "name")
-					refQName := expandQName(attribute(value, "ref"), ns)
+					rawRef := attribute(value, "ref")
+					rawType := attribute(value, "type")
+					if (name != "" && rawRef != "") || (rawRef != "" && rawType != "") || ((value.Name.Local == "complexType" || value.Name.Local == "simpleType") && rawRef != "") || ((value.Name.Local == "element" || value.Name.Local == "group" || value.Name.Local == "attributeGroup" || value.Name.Local == "attribute") && name == "" && rawRef == "") {
+						return parsed, stop("xml", "XSD_DECLARATION_INVALID", "XSD name, ref, and type attributes are inconsistent")
+					}
+					if (value.Name.Local == "complexType" || value.Name.Local == "simpleType") && name == "" {
+						return parsed, stop("xml", "UNSUPPORTED_DIALECT", "anonymous XSD types are not supported by the evidence model")
+					}
+					refQName := expandQName(rawRef, ns)
 					if name == "" && refQName != "" {
 						name = qnameLocalPart(refQName)
 					}
@@ -579,7 +587,7 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 								redefinitionRoot = qname(root.Namespace, root.Name)
 							}
 						}
-						component := XSDComponent{Namespace: schemaTarget, ParentQName: parentQName, Name: name, Kind: value.Name.Local, Order: order, Type: expandQName(attribute(value, "type"), ns), RefQName: refQName, MinOccurs: attributeOr(value, "minOccurs", "1"), MaxOccurs: attributeOr(value, "maxOccurs", "1"), Facets: []XSDFacet{}, Redefines: directRedefinition, RedefinitionRootQName: redefinitionRoot}
+						component := XSDComponent{Namespace: schemaTarget, ParentQName: parentQName, Name: name, Kind: value.Name.Local, Order: order, Type: expandQName(rawType, ns), RefQName: refQName, MinOccurs: attributeOr(value, "minOccurs", "1"), MaxOccurs: attributeOr(value, "maxOccurs", "1"), Facets: []XSDFacet{}, Redefines: directRedefinition, RedefinitionRootQName: redefinitionRoot}
 						parsed.XSDComponents = append(parsed.XSDComponents, component)
 						componentAtDepth[depth] = len(parsed.XSDComponents) - 1
 					}
@@ -734,8 +742,8 @@ func buildContract(ctx context.Context, manifest Manifest, documents map[string]
 			}
 			componentKey := xsdComponentKey(component)
 			if component.Redefines {
-				if component.ParentQName != "" || (component.Kind != "complexType" && component.Kind != "simpleType" && component.Kind != "group" && component.Kind != "attributeGroup") {
-					return nil, stop("contract", "CONTRACT_CONFLICT", "unsupported XSD redefine component")
+				if component.ParentQName != "" || component.Kind != "simpleType" {
+					return nil, stop("contract", "UNSUPPORTED_DIALECT", "only simpleType XSD redefine is supported by the evidence model")
 				}
 				redefinedComponents[componentKey] = true
 			} else {
