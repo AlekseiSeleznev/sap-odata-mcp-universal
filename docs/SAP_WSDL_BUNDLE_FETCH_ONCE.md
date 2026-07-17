@@ -105,13 +105,19 @@ SOAP POST. Each unique normalized URI can reach `RoundTrip` at most once.
 Imported WSDL documents are resolved as one semantic symbol table: service,
 port, binding, portType, operation, input/output/fault messages, and message
 parts may live in separate documents. Duplicate WSDL or XSD definitions must be
-identical; conflicts hard-stop. XSD evidence retains parent, sequence order,
-cardinality, type, and facets.
+identical; conflicts hard-stop. XSD evidence gives every declaration a stable
+structural `component_id` and `parent_id`, and retains namespace, expanded
+parent QName when one exists, sequence order, cardinality, nillability, QName
+references, named or inline type relationships, derivation, and facets.
+Anonymous simple and complex types use an explicit `anonymous=true` component
+owned through the declaring element or attribute's `inline_type_id`; nested
+anonymous types extend the same structural path without inventing an XSD QName.
 
 The evidence model resolves only the exact simple-type `xsd:redefine` form:
 `restriction` of the original self QName, with inherited and new facets retained.
-Complex/group, list/union/non-self redefinitions and anonymous XSD types fail
-closed as `UNSUPPORTED_DIALECT` instead of publishing an approximate contract.
+Complex/group, list/union/non-self redefinitions and anonymous types in invalid
+or ambiguous declaration positions fail closed instead of publishing an
+approximate contract.
 
 Only a complete sanitized bundle is atomically renamed into `evidence_dir`.
 Private origins are represented by keyed HMAC identifiers; raw XML, endpoints,
@@ -138,4 +144,4 @@ Before a separately approved live call:
 Reviewed canonical schema digests:
 
 - input: `94dd1a4f23157cd0076a685b8104d2cddec090fec99b6fc1a624cbc334007ea2`;
-- output: `ecc0286eb79b8dba9efb8e1e776fba5bc0004b5d21a33deb3d083cd5a0c8c853`.
+- output: `7af195c4ee06bf8e70f3e270c820b9a26b6a9b167538dfaf22ba5a157533f359`.

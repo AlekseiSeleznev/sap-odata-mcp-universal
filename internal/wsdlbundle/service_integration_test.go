@@ -164,6 +164,75 @@ func TestServiceFetchesRecursiveClosureOnceAndPublishesSanitizedAtomicEvidence(t
 	}
 }
 
+func TestServicePublishesAnonymousXSDTypesWithExactStructuralEvidence(t *testing.T) {
+	wsdl := strings.Replace(minimalWSDL(), `<wsdl:message name="InvoiceRequest"/>`, `<wsdl:types><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:employee-shop:invoice" elementFormDefault="qualified"><xsd:element name="InvoiceRequest" nillable="true"><xsd:complexType><xsd:sequence><xsd:element name="Header" minOccurs="1" maxOccurs="1"><xsd:complexType><xsd:sequence><xsd:element name="Code" minOccurs="0" maxOccurs="1" nillable="true"><xsd:simpleType><xsd:restriction base="xsd:string"><xsd:length value="3"/><xsd:pattern value="[A-Z]{3}"/></xsd:restriction></xsd:simpleType></xsd:element></xsd:sequence></xsd:complexType></xsd:element></xsd:sequence></xsd:complexType></xsd:element></xsd:schema></wsdl:types><wsdl:message name="InvoiceRequest"><wsdl:part name="parameters" element="tns:InvoiceRequest"/></wsdl:message>`, 1)
+	service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+		return roundTripFunc(responseRoundTrip(http.StatusOK, "application/xml", wsdl)), nil
+	}, nil)
+
+	result, err := service.Fetch(context.Background(), inputArgs(input))
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if result.Outcome != "COMPLETE" || result.Bundle == nil || result.HardStop != nil {
+		t.Fatalf("anonymous XSD evidence was not completed: %#v hard_stop=%+v", result, result.HardStop)
+	}
+
+	encoded, err := json.Marshal(result.Bundle.Contract.XSDComponents)
+	if err != nil {
+		t.Fatalf("encode XSD evidence: %v", err)
+	}
+	var components []map[string]interface{}
+	if err := json.Unmarshal(encoded, &components); err != nil {
+		t.Fatalf("decode public XSD evidence: %v", err)
+	}
+
+	requestID := "xsd:element:{urn:employee-shop:invoice}InvoiceRequest"
+	request := componentEvidenceByID(t, components, requestID)
+	if request["namespace"] != "urn:employee-shop:invoice" || request["nillable"] != true || request["inline_type_id"] != requestID+"/complexType[1]" {
+		t.Fatalf("global element identity or anonymous type relationship drifted: %#v", request)
+	}
+	requestType := componentEvidenceByID(t, components, requestID+"/complexType[1]")
+	if requestType["parent_id"] != requestID || requestType["anonymous"] != true || requestType["kind"] != "complexType" {
+		t.Fatalf("anonymous complex type parent evidence missing: %#v", requestType)
+	}
+
+	headerID := requestID + "/complexType[1]/element[1]"
+	header := componentEvidenceByID(t, components, headerID)
+	if header["parent_id"] != requestID+"/complexType[1]" || header["order"] != float64(1) || header["min_occurs"] != "1" || header["max_occurs"] != "1" || header["nillable"] != false || header["inline_type_id"] != headerID+"/complexType[1]" {
+		t.Fatalf("nested element structure evidence missing: %#v", header)
+	}
+
+	codeID := headerID + "/complexType[1]/element[1]"
+	code := componentEvidenceByID(t, components, codeID)
+	if code["parent_id"] != headerID+"/complexType[1]" || code["order"] != float64(1) || code["min_occurs"] != "0" || code["max_occurs"] != "1" || code["nillable"] != true || code["inline_type_id"] != codeID+"/simpleType[1]" {
+		t.Fatalf("nested anonymous simple type owner evidence missing: %#v", code)
+	}
+	codeType := componentEvidenceByID(t, components, codeID+"/simpleType[1]")
+	typeReferences, ok := codeType["type_references"].([]interface{})
+	if !ok || len(typeReferences) != 1 || typeReferences[0] != "{http://www.w3.org/2001/XMLSchema}string" {
+		t.Fatalf("anonymous restriction type relationship missing: %#v", codeType)
+	}
+	if codeType["parent_id"] != codeID || codeType["anonymous"] != true || codeType["kind"] != "simpleType" || codeType["type"] != "{http://www.w3.org/2001/XMLSchema}string" || codeType["derivation"] != "restriction" {
+		t.Fatalf("anonymous simple type restriction evidence missing: %#v", codeType)
+	}
+	facets, ok := codeType["facets"].([]interface{})
+	if !ok || len(facets) != 2 {
+		t.Fatalf("anonymous simple type facets missing: %#v", codeType)
+	}
+}
+
+func componentEvidenceByID(t *testing.T, components []map[string]interface{}, id string) map[string]interface{} {
+	t.Helper()
+	for _, component := range components {
+		if component["component_id"] == id {
+			return component
+		}
+	}
+	t.Fatalf("XSD component %q not found in %#v", id, components)
+	return nil
+}
+
 func productionFixtureManifest(rootURL, evidenceDir string) Manifest {
 	return Manifest{
 		SchemaVersion: 1, SystemID: SystemID, ContractID: ContractID,

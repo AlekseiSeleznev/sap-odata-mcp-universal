@@ -453,7 +453,7 @@ func TestParseXMLRejectsAmbiguousXSDDeclarations(t *testing.T) {
 		{"named local complex type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:element name="E"><xsd:complexType name="T"/></xsd:element></xsd:schema>`, "XSD_DECLARATION_INVALID"},
 		{"named local simple type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:element name="E"><xsd:simpleType name="T"><xsd:restriction base="xsd:string"/></xsd:simpleType></xsd:element></xsd:schema>`, "XSD_DECLARATION_INVALID"},
 		{"named local group", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:complexType name="T"><xsd:group name="G"/></xsd:complexType></xsd:schema>`, "XSD_DECLARATION_INVALID"},
-		{"anonymous complex type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:element name="E"><xsd:complexType/></xsd:element></xsd:schema>`, "UNSUPPORTED_DIALECT"},
+		{"anonymous global complex type", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t"><xsd:complexType/></xsd:schema>`, "XSD_DECLARATION_INVALID"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

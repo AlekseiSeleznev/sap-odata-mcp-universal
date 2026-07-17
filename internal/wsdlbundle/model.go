@@ -144,20 +144,25 @@ type MessagePart struct {
 }
 
 type XSDComponent struct {
+	ComponentID           string     `json:"component_id"`
+	ParentID              string     `json:"parent_id"`
 	Namespace             string     `json:"namespace"`
 	ParentQName           string     `json:"parent_qname"`
 	Name                  string     `json:"name"`
+	Anonymous             bool       `json:"anonymous"`
 	Kind                  string     `json:"kind"`
 	Order                 int        `json:"order"`
 	Type                  string     `json:"type"`
 	RefQName              string     `json:"ref_qname"`
+	InlineTypeID          string     `json:"inline_type_id"`
 	MinOccurs             string     `json:"min_occurs"`
 	MaxOccurs             string     `json:"max_occurs"`
+	Nillable              bool       `json:"nillable"`
+	TypeReferences        []string   `json:"type_references"`
+	Derivation            string     `json:"derivation"`
 	Facets                []XSDFacet `json:"facets"`
 	Redefines             bool       `json:"-"`
-	TypeReferences        []string   `json:"-"`
 	RedefinitionRootQName string     `json:"-"`
-	Derivation            string     `json:"-"`
 }
 
 type XSDFacet struct {

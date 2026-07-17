@@ -52,7 +52,7 @@ func TestSAPWSDLBundleFetchToolPublishesExactSchemas(t *testing.T) {
 		if got := schemaDigest(t, tool.InputSchema); got != "94dd1a4f23157cd0076a685b8104d2cddec090fec99b6fc1a624cbc334007ea2" {
 			t.Fatalf("inputSchema canonical digest drifted: %s", got)
 		}
-		if got := schemaDigest(t, tool.OutputSchema); got != "ecc0286eb79b8dba9efb8e1e776fba5bc0004b5d21a33deb3d083cd5a0c8c853" {
+		if got := schemaDigest(t, tool.OutputSchema); got != "7af195c4ee06bf8e70f3e270c820b9a26b6a9b167538dfaf22ba5a157533f359" {
 			t.Fatalf("outputSchema canonical digest drifted: %s", got)
 		}
 	}

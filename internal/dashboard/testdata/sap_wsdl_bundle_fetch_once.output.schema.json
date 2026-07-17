@@ -105,15 +105,22 @@
                   "items": {
                     "type": "object",
                     "properties": {
+                      "component_id": {"type": "string", "minLength": 1},
+                      "parent_id": {"type": "string"},
                       "namespace": {"type": "string"},
                       "parent_qname": {"type": "string"},
                       "name": {"type": "string"},
+                      "anonymous": {"type": "boolean"},
                       "kind": {"type": "string", "enum": ["element", "complexType", "simpleType", "group", "attributeGroup", "attribute"]},
                       "order": {"type": "integer", "minimum": 0},
                       "type": {"type": "string"},
                       "ref_qname": {"type": "string"},
+                      "inline_type_id": {"type": "string"},
                       "min_occurs": {"type": "string"},
                       "max_occurs": {"type": "string"},
+                      "nillable": {"type": "boolean"},
+                      "type_references": {"type": "array", "items": {"type": "string"}},
+                      "derivation": {"type": "string", "enum": ["", "restriction", "extension", "list", "union"]},
                       "facets": {
                         "type": "array",
                         "items": {
@@ -127,7 +134,7 @@
                         }
                       }
                     },
-                    "required": ["namespace", "parent_qname", "name", "kind", "order", "type", "ref_qname", "min_occurs", "max_occurs", "facets"],
+                    "required": ["component_id", "parent_id", "namespace", "parent_qname", "name", "anonymous", "kind", "order", "type", "ref_qname", "inline_type_id", "min_occurs", "max_occurs", "nillable", "type_references", "derivation", "facets"],
                     "additionalProperties": false
                   }
                 },

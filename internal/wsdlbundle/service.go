@@ -212,13 +212,60 @@ func validateBundle(bundle *Bundle) error {
 			}
 		}
 	}
+	componentByID := make(map[string]XSDComponent, len(contract.XSDComponents))
 	for _, component := range contract.XSDComponents {
-		if component.Namespace == "" || component.Name == "" || !validXSDComponentKind(component.Kind) || component.Order < 0 || component.MinOccurs == "" || component.MaxOccurs == "" || component.Facets == nil {
+		if _, exists := componentByID[component.ComponentID]; exists {
+			return fmt.Errorf("duplicate XSD component identity")
+		}
+		componentByID[component.ComponentID] = component
+		if component.ComponentID == "" || component.Namespace == "" || !validXSDComponentKind(component.Kind) || component.Order < 0 || component.MinOccurs == "" || component.MaxOccurs == "" || component.TypeReferences == nil || component.Facets == nil {
 			return fmt.Errorf("XSD component invariant failed")
+		}
+		if component.ParentID == "" {
+			if component.Anonymous || component.Name == "" || component.ComponentID != globalXSDComponentID(component.Namespace, component.Kind, component.Name) {
+				return fmt.Errorf("global XSD component invariant failed")
+			}
+		} else if component.ComponentID != localXSDComponentID(component.ParentID, component.Kind, component.Order) {
+			return fmt.Errorf("local XSD component invariant failed")
+		}
+		if component.Anonymous {
+			if component.Name != "" || (component.Kind != "complexType" && component.Kind != "simpleType") || component.ParentID == "" {
+				return fmt.Errorf("anonymous XSD component invariant failed")
+			}
+		} else if component.Name == "" {
+			return fmt.Errorf("named XSD component invariant failed")
+		}
+		if component.Nillable && component.Kind != "element" {
+			return fmt.Errorf("XSD nillability invariant failed")
+		}
+		if component.InlineTypeID != "" && ((component.Kind != "element" && component.Kind != "attribute") || component.Type != "" || component.RefQName != "" || !strings.HasPrefix(component.InlineTypeID, component.ComponentID+"/")) {
+			return fmt.Errorf("inline XSD type invariant failed")
+		}
+		switch component.Derivation {
+		case "", "restriction", "extension", "list", "union":
+		default:
+			return fmt.Errorf("XSD derivation invariant failed")
 		}
 		for _, facet := range component.Facets {
 			if facet.Name == "" {
 				return fmt.Errorf("XSD facet invariant failed")
+			}
+		}
+	}
+	for _, component := range contract.XSDComponents {
+		if component.ParentID != "" {
+			parent, ok := componentByID[component.ParentID]
+			if !ok {
+				return fmt.Errorf("XSD component parent invariant failed")
+			}
+			if component.Anonymous && parent.InlineTypeID != component.ComponentID {
+				return fmt.Errorf("anonymous XSD owner invariant failed")
+			}
+		}
+		if component.InlineTypeID != "" {
+			inlineType, ok := componentByID[component.InlineTypeID]
+			if !ok || !inlineType.Anonymous || inlineType.ParentID != component.ComponentID || (inlineType.Kind != "complexType" && inlineType.Kind != "simpleType") {
+				return fmt.Errorf("inline XSD type target invariant failed")
 			}
 		}
 	}

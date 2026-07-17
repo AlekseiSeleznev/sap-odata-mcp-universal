@@ -159,6 +159,9 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 					}
 				}
 			}
+			if err := reindexXSDComponents(doc.Parsed.XSDComponents); err != nil {
+				return result, stop("contract", "CONTRACT_CONFLICT", "included XSD component identity could not be rebased")
+			}
 			for index := range doc.Parsed.References {
 				if (doc.Parsed.References[index].Relation == "xsd_include" || doc.Parsed.References[index].Relation == "xsd_redefine") && doc.Parsed.References[index].InheritedXSDNamespace == "" {
 					doc.Parsed.References[index].InheritedXSDNamespace = item.InheritedXSDNamespace
@@ -560,35 +563,55 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 					schemaDepth := nearestDepth(schemaTargetAtDepth, depth)
 					directRedefinition := redefineDepth > 0 && depth == redefineDepth+1
 					globalDeclaration := depth == schemaDepth+1 || directRedefinition
+					parentIndex, hasParent := nearestComponent(componentAtDepth, depth)
+					anonymous := (value.Name.Local == "complexType" || value.Name.Local == "simpleType") && name == ""
 					invalidPlacement := globalDeclaration && rawRef != ""
 					if !globalDeclaration {
 						switch value.Name.Local {
 						case "complexType", "simpleType":
-							invalidPlacement = name != ""
+							invalidPlacement = name != "" || !hasParent
 						case "group", "attributeGroup":
 							invalidPlacement = name != "" || rawRef == ""
+						}
+					}
+					if anonymous {
+						if globalDeclaration || !hasParent {
+							invalidPlacement = true
+						} else {
+							parent := parsed.XSDComponents[parentIndex]
+							validOwner := parent.Kind == "element" || (parent.Kind == "attribute" && value.Name.Local == "simpleType")
+							if !validOwner || parent.Type != "" || parent.RefQName != "" || parent.InlineTypeID != "" {
+								invalidPlacement = true
+							}
 						}
 					}
 					if invalidPlacement || (name != "" && rawRef != "") || (rawRef != "" && rawType != "") || ((value.Name.Local == "complexType" || value.Name.Local == "simpleType") && rawRef != "") || ((value.Name.Local == "complexType" || value.Name.Local == "simpleType" || value.Name.Local == "group" || value.Name.Local == "attributeGroup") && rawType != "") || ((value.Name.Local == "element" || value.Name.Local == "group" || value.Name.Local == "attributeGroup" || value.Name.Local == "attribute") && name == "" && rawRef == "") {
 						return parsed, stop("xml", "XSD_DECLARATION_INVALID", "XSD name, ref, and type attributes are inconsistent")
 					}
-					if (value.Name.Local == "complexType" || value.Name.Local == "simpleType") && name == "" {
-						return parsed, stop("xml", "UNSUPPORTED_DIALECT", "anonymous XSD types are not supported by the evidence model")
+					nillable, nillableStop := xsdNillable(value)
+					if nillableStop != nil {
+						return parsed, nillableStop
 					}
 					refQName := expandQName(rawRef, ns)
 					if name == "" && refQName != "" {
 						name = qnameLocalPart(refQName)
 					}
-					if name != "" {
+					if name != "" || anonymous {
 						parentQName := ""
+						parentID := ""
 						order := 0
-						if parentIndex, ok := nearestComponent(componentAtDepth, depth); ok {
+						if hasParent {
 							parent := parsed.XSDComponents[parentIndex]
 							parentQName = qname(parent.Namespace, parent.Name)
+							parentID = parent.ComponentID
 							childOrder[parentIndex]++
 							order = childOrder[parentIndex]
 						}
 						schemaTarget, _ := nearestString(schemaTargetAtDepth, depth)
+						componentID := globalXSDComponentID(schemaTarget, value.Name.Local, name)
+						if parentID != "" {
+							componentID = localXSDComponentID(parentID, value.Name.Local, order)
+						}
 						redefinitionRoot := ""
 						if directRedefinition {
 							redefinitionRoot = qname(schemaTarget, name)
@@ -598,9 +621,15 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 								redefinitionRoot = qname(root.Namespace, root.Name)
 							}
 						}
-						component := XSDComponent{Namespace: schemaTarget, ParentQName: parentQName, Name: name, Kind: value.Name.Local, Order: order, Type: expandQName(rawType, ns), RefQName: refQName, MinOccurs: attributeOr(value, "minOccurs", "1"), MaxOccurs: attributeOr(value, "maxOccurs", "1"), Facets: []XSDFacet{}, Redefines: directRedefinition, RedefinitionRootQName: redefinitionRoot}
+						component := XSDComponent{ComponentID: componentID, ParentID: parentID, Namespace: schemaTarget, ParentQName: parentQName, Name: name, Anonymous: anonymous, Kind: value.Name.Local, Order: order, Type: expandQName(rawType, ns), RefQName: refQName, MinOccurs: attributeOr(value, "minOccurs", "1"), MaxOccurs: attributeOr(value, "maxOccurs", "1"), Nillable: nillable, TypeReferences: []string{}, Facets: []XSDFacet{}, Redefines: directRedefinition, RedefinitionRootQName: redefinitionRoot}
 						parsed.XSDComponents = append(parsed.XSDComponents, component)
-						componentAtDepth[depth] = len(parsed.XSDComponents) - 1
+						componentIndex := len(parsed.XSDComponents) - 1
+						componentAtDepth[depth] = componentIndex
+						if anonymous {
+							parent := parsed.XSDComponents[parentIndex]
+							parent.InlineTypeID = componentID
+							parsed.XSDComponents[parentIndex] = parent
+						}
 					}
 				}
 				if value.Name.Local == "restriction" || value.Name.Local == "extension" || value.Name.Local == "list" || value.Name.Local == "union" {
@@ -792,7 +821,7 @@ func buildContract(ctx context.Context, manifest Manifest, documents map[string]
 		}
 	}
 	for _, component := range componentIndex {
-		if component.ParentQName == "" && component.RefQName == "" {
+		if component.ParentID == "" && component.RefQName == "" {
 			symbol := qname(component.Namespace, component.Name)
 			switch component.Kind {
 			case "element":
@@ -938,10 +967,7 @@ func sortedDocumentURIs(documents map[string]*rawDocument) []string {
 }
 
 func xsdComponentKey(component XSDComponent) string {
-	if component.ParentQName == "" {
-		return component.Namespace + "\x00" + component.Kind + "\x00" + component.Name
-	}
-	return component.ParentQName + "\x00" + component.Kind + "\x00" + fmt.Sprintf("%08d", component.Order)
+	return component.ComponentID
 }
 
 func mergeSimpleTypeRedefinition(original, redefinition XSDComponent) (XSDComponent, error) {
@@ -1234,6 +1260,49 @@ func rebaseEmptyQName(value, namespace string) string {
 	}
 	return value
 }
+
+func globalXSDComponentID(namespace, kind, name string) string {
+	return "xsd:" + kind + ":" + qname(namespace, name)
+}
+
+func localXSDComponentID(parentID, kind string, order int) string {
+	return parentID + "/" + kind + "[" + fmt.Sprintf("%d", order) + "]"
+}
+
+func reindexXSDComponents(components []XSDComponent) error {
+	rebased := make(map[string]string, len(components))
+	inlineTypes := make([]string, len(components))
+	for index := range components {
+		component := &components[index]
+		oldID := component.ComponentID
+		inlineTypes[index] = component.InlineTypeID
+		if component.ParentID == "" {
+			if component.Anonymous || component.Name == "" {
+				return fmt.Errorf("global XSD component has no name")
+			}
+			component.ComponentID = globalXSDComponentID(component.Namespace, component.Kind, component.Name)
+		} else {
+			parentID, ok := rebased[component.ParentID]
+			if !ok {
+				return fmt.Errorf("XSD component parent did not resolve")
+			}
+			component.ParentID = parentID
+			component.ComponentID = localXSDComponentID(parentID, component.Kind, component.Order)
+		}
+		rebased[oldID] = component.ComponentID
+	}
+	for index, oldInlineTypeID := range inlineTypes {
+		if oldInlineTypeID == "" {
+			continue
+		}
+		inlineTypeID, ok := rebased[oldInlineTypeID]
+		if !ok {
+			return fmt.Errorf("anonymous XSD type did not resolve")
+		}
+		components[index].InlineTypeID = inlineTypeID
+	}
+	return nil
+}
 func xsdTypeResolved(value string, declared map[string]bool) bool {
 	if declared[value] {
 		return true
@@ -1266,6 +1335,32 @@ func isFacet(local string) bool {
 		return true
 	}
 	return false
+}
+
+func xsdNillable(value xml.StartElement) (bool, *stopError) {
+	raw := ""
+	present := false
+	for _, attr := range value.Attr {
+		if attr.Name.Local == "nillable" {
+			raw = attr.Value
+			present = true
+			break
+		}
+	}
+	if !present {
+		return false, nil
+	}
+	if value.Name.Local != "element" {
+		return false, stop("xml", "XSD_DECLARATION_INVALID", "nillable is valid only on XSD element declarations")
+	}
+	switch raw {
+	case "true", "1":
+		return true, nil
+	case "false", "0":
+		return false, nil
+	default:
+		return false, stop("xml", "XSD_DECLARATION_INVALID", "XSD nillable value is invalid")
+	}
 }
 
 func isXSD11OnlyElement(local string) bool {
@@ -1321,7 +1416,7 @@ func sanitizeComponents(values []XSDComponent, manifest Manifest, key []byte) []
 		for _, facet := range value.Facets {
 			facets = append(facets, XSDFacet{Name: facet.Name, Value: sanitizeValue(facet.Value, manifest, key)})
 		}
-		result = append(result, XSDComponent{Namespace: sanitizeValue(value.Namespace, manifest, key), ParentQName: sanitizeValue(value.ParentQName, manifest, key), Name: sanitizeValue(value.Name, manifest, key), Kind: value.Kind, Order: value.Order, Type: sanitizeValue(value.Type, manifest, key), RefQName: sanitizeValue(value.RefQName, manifest, key), MinOccurs: value.MinOccurs, MaxOccurs: value.MaxOccurs, Facets: facets})
+		result = append(result, XSDComponent{ComponentID: sanitizeValue(value.ComponentID, manifest, key), ParentID: sanitizeValue(value.ParentID, manifest, key), Namespace: sanitizeValue(value.Namespace, manifest, key), ParentQName: sanitizeValue(value.ParentQName, manifest, key), Name: sanitizeValue(value.Name, manifest, key), Anonymous: value.Anonymous, Kind: value.Kind, Order: value.Order, Type: sanitizeValue(value.Type, manifest, key), RefQName: sanitizeValue(value.RefQName, manifest, key), InlineTypeID: sanitizeValue(value.InlineTypeID, manifest, key), MinOccurs: value.MinOccurs, MaxOccurs: value.MaxOccurs, Nillable: value.Nillable, TypeReferences: sanitizeStrings(value.TypeReferences, manifest, key), Derivation: value.Derivation, Facets: facets})
 	}
 	return result
 }
