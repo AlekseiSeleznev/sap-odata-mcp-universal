@@ -133,4 +133,4 @@ Before a separately approved live call:
 Reviewed canonical schema digests:
 
 - input: `94dd1a4f23157cd0076a685b8104d2cddec090fec99b6fc1a624cbc334007ea2`;
-- output: `830eac4337883bc0fb9e025fedce94ed2416a8ae949fa21e193fda082adc1ad6`.
+- output: `373021f8dd631544c96ef4c13fb822489766a165c414227bf5c5b7a1dee2cd21`.

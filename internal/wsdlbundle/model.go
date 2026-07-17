@@ -153,6 +153,7 @@ type XSDComponent struct {
 	MinOccurs   string     `json:"min_occurs"`
 	MaxOccurs   string     `json:"max_occurs"`
 	Facets      []XSDFacet `json:"facets"`
+	Redefines   bool       `json:"-"`
 }
 
 type XSDFacet struct {

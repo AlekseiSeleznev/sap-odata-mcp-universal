@@ -91,8 +91,8 @@ func TestServiceRejectsUnsafeXMLDialectsAndCrossOriginReferences(t *testing.T) {
 		{"xsd 1.1", "UNSUPPORTED_DIALECT", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"><xsd:assert test="true()"/></xsd:schema>`},
 		{"unknown policy dialect", "UNSUPPORTED_DIALECT", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:bad="urn:vendor:policy"><bad:Policy/></wsdl:definitions>`},
 		{"cross origin", "URI_POLICY_VIOLATION", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:x" location="https://other.invalid/private.wsdl"/></wsdl:definitions>`},
-		{"dot traversal", "URI_POLICY_VIOLATION", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:x" location="../private.wsdl"/></wsdl:definitions>`},
-		{"decoded control", "URI_POLICY_VIOLATION", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:x" location="/%0aprivate.wsdl"/></wsdl:definitions>`},
+		{"dot traversal", "URI_POLICY_VIOLATION", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:x" location="../private.wsdl?sap-client=100"/></wsdl:definitions>`},
+		{"decoded control", "URI_POLICY_VIOLATION", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:x" location="/%0aprivate.wsdl?sap-client=100"/></wsdl:definitions>`},
 		{"missing import", "REFERENCE_MISSING", `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:x"/></wsdl:definitions>`},
 	}
 	for _, tc := range tests {
@@ -128,7 +128,7 @@ func TestServiceEnforcesXMLAndClosureLimitsWithoutPartialEvidence(t *testing.T) 
 		{"xml nesting", "XML_NESTING_LIMIT", func(l *Limits) { l.MaxXMLNesting = 2 }, `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:types><wsdl:documentation/></wsdl:types></wsdl:definitions>`},
 		{"attribute count", "XML_ATTRIBUTE_LIMIT", func(l *Limits) { l.MaxAttributes = 1 }, `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" name="x" targetNamespace="urn:x"/>`},
 		{"attribute bytes", "XML_ATTRIBUTE_SIZE_LIMIT", func(l *Limits) { l.MaxAttributeBytes = 3 }, `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" name="long"/>`},
-		{"reference count", "REFERENCE_LIMIT", func(l *Limits) { l.MaxReferences = 1 }, `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:a" location="/a.wsdl"/><wsdl:import namespace="urn:b" location="/b.wsdl"/></wsdl:definitions>`},
+		{"reference count", "REFERENCE_LIMIT", func(l *Limits) { l.MaxReferences = 1 }, `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:a" location="/a.wsdl?sap-client=100"/><wsdl:import namespace="urn:b" location="/b.wsdl?sap-client=100"/></wsdl:definitions>`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -170,16 +170,16 @@ func TestServiceEnforcesDocumentDepthTotalAndEvidenceLimits(t *testing.T) {
 					body := minimalWSDL()
 					switch tc.name {
 					case "documents":
-						body = `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:a" location="/a.wsdl"/></wsdl:definitions>`
+						body = `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:a" location="/a.wsdl?sap-client=100"/></wsdl:definitions>`
 					case "depth":
 						if strings.HasSuffix(req.URL.Path, "invoice.wsdl") {
-							body = `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:a" location="/a.wsdl"/></wsdl:definitions>`
+							body = `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:a" location="/a.wsdl?sap-client=100"/></wsdl:definitions>`
 						} else {
-							body = `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:b" location="/b.wsdl"/></wsdl:definitions>`
+							body = `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:b" location="/b.wsdl?sap-client=100"/></wsdl:definitions>`
 						}
 					case "total bytes":
 						if strings.HasSuffix(req.URL.Path, "invoice.wsdl") {
-							body = `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:a" location="/a.wsdl"/>` + strings.Repeat(" ", 350) + `</wsdl:definitions>`
+							body = `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"><wsdl:import namespace="urn:a" location="/a.wsdl?sap-client=100"/>` + strings.Repeat(" ", 350) + `</wsdl:definitions>`
 						} else {
 							body = `<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">` + strings.Repeat(" ", 350) + `</wsdl:definitions>`
 						}
@@ -231,7 +231,7 @@ func TestServiceEnforcesPerDocumentAndWholeActionTimeouts(t *testing.T) {
 }
 
 func TestServiceHardStopsOnConflictingXSDComponents(t *testing.T) {
-	root := strings.Replace(minimalWSDL(), "</wsdl:definitions>", `<wsdl:types><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"><xsd:import namespace="urn:types" schemaLocation="/a.xsd"/><xsd:import namespace="urn:types" schemaLocation="/b.xsd"/></xsd:schema></wsdl:types></wsdl:definitions>`, 1)
+	root := strings.Replace(minimalWSDL(), "</wsdl:definitions>", `<wsdl:types><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"><xsd:import namespace="urn:types" schemaLocation="/a.xsd?sap-client=100"/><xsd:import namespace="urn:types" schemaLocation="/b.xsd?sap-client=100"/></xsd:schema></wsdl:types></wsdl:definitions>`, 1)
 	var calls atomic.Int32
 	service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
 		return roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -332,23 +332,68 @@ func TestPublishEvidenceHonorsCanceledContextWithoutPublishing(t *testing.T) {
 	}
 }
 
-func TestNormalizedFetchURIDeduplicatesEscapedUnreservedPath(t *testing.T) {
+func TestResolvedFetchURIPreservesQueryAndDeduplicatesEscapedUnreservedPath(t *testing.T) {
 	manifest := productionFixtureManifest("https://gpi.invalid/invoice.wsdl?sap-client=100", t.TempDir())
-	plain, err := normalizedFetchURI("https://gpi.invalid/invoice.wsdl?sap-client=100", nil, manifest)
+	plain, err := resolveFetchURI("https://gpi.invalid/invoice.wsdl?sap-client=%31%30%30", nil, manifest)
 	if err != nil {
 		t.Fatalf("normalize plain URI: %v", err)
 	}
-	escaped, err := normalizedFetchURI("https://gpi.invalid/%69nvoice.wsdl?sap-client=100", nil, manifest)
+	escaped, err := resolveFetchURI("https://gpi.invalid/%69nvoice.wsdl?sap-client=%31%30%30", nil, manifest)
 	if err != nil {
 		t.Fatalf("normalize escaped URI: %v", err)
 	}
-	if plain != escaped {
+	if plain.RequestURI != "https://gpi.invalid/invoice.wsdl?sap-client=%31%30%30" {
+		t.Fatalf("request query was rewritten: %q", plain.RequestURI)
+	}
+	if plain.NormalizedKey != escaped.NormalizedKey {
 		t.Fatalf("equivalent URIs did not deduplicate: plain=%q escaped=%q", plain, escaped)
+	}
+}
+
+func TestResolveFetchURIRejectsClientSwitchAndUnsafeDecodedQuery(t *testing.T) {
+	manifest := productionFixtureManifest("https://gpi.invalid/invoice.wsdl?sap-client=100", t.TempDir())
+	for _, raw := range []string{
+		"https://gpi.invalid/invoice.wsdl",
+		"https://gpi.invalid/invoice.wsdl?sap-client=200",
+		"https://gpi.invalid/invoice.wsdl?sap-client=100&sap-client=100",
+		"https://gpi.invalid/invoice.wsdl?sap-client=100&x=%0A",
+		"https://gpi.invalid/invoice.wsdl?sap-client=100&x=%5C",
+	} {
+		if _, err := resolveFetchURI(raw, nil, manifest); err == nil {
+			t.Fatalf("unsafe or switched query accepted: %q", raw)
+		}
+	}
+}
+
+func TestResolveFetchURIKeyNormalizesEmptyAuthorityPath(t *testing.T) {
+	manifest := productionFixtureManifest("https://gpi.invalid/invoice.wsdl?sap-client=100", t.TempDir())
+	emptyPath, err := resolveFetchURI("https://gpi.invalid?sap-client=100", nil, manifest)
+	if err != nil {
+		t.Fatalf("normalize empty path: %v", err)
+	}
+	slashPath, err := resolveFetchURI("https://gpi.invalid/?sap-client=100", nil, manifest)
+	if err != nil {
+		t.Fatalf("normalize slash path: %v", err)
+	}
+	if emptyPath.NormalizedKey != slashPath.NormalizedKey {
+		t.Fatalf("empty and slash paths did not deduplicate: empty=%q slash=%q", emptyPath.NormalizedKey, slashPath.NormalizedKey)
 	}
 }
 
 func TestServiceHardStopsWhenWSDLMessagePartDoesNotResolveInXSDClosure(t *testing.T) {
 	wsdl := strings.Replace(minimalWSDL(), `<wsdl:message name="InvoiceRequest"/>`, `<wsdl:message name="InvoiceRequest"><wsdl:part name="parameters" element="tns:MissingElement"/></wsdl:message>`, 1)
+	service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+		return roundTripFunc(responseRoundTrip(http.StatusOK, "application/xml", wsdl)), nil
+	}, nil)
+	result, err := service.Fetch(context.Background(), inputArgs(input))
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	assertHardStop(t, result, "CONTRACT_MISMATCH", true, 1)
+}
+
+func TestServiceHardStopsWhenReferencedXSDElementTypeDoesNotResolve(t *testing.T) {
+	wsdl := strings.Replace(minimalWSDL(), `<wsdl:message name="InvoiceRequest"/>`, `<wsdl:types><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:employee-shop:invoice"><xsd:element name="InvoiceRequest" type="tns:MissingType"/></xsd:schema></wsdl:types><wsdl:message name="InvoiceRequest"><wsdl:part name="parameters" element="tns:InvoiceRequest"/></wsdl:message>`, 1)
 	service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
 		return roundTripFunc(responseRoundTrip(http.StatusOK, "application/xml", wsdl)), nil
 	}, nil)

@@ -43,9 +43,15 @@ type fetchResult struct {
 }
 
 type queueItem struct {
-	URI                   string
+	RequestURI            string
+	NormalizedKey         string
 	Depth                 int
 	InheritedXSDNamespace string
+}
+
+type resolvedURI struct {
+	RequestURI    string
+	NormalizedKey string
 }
 
 type rawDocument struct {
@@ -96,13 +102,13 @@ type portInfo struct {
 
 func fetchClosure(ctx context.Context, manifest Manifest, credentials Credentials, evidenceKey []byte, roundTripper http.RoundTripper) (fetchResult, *stopError) {
 	result := fetchResult{}
-	root, err := normalizedFetchURI(manifest.RootURL, nil, manifest)
+	root, err := resolveFetchURI(manifest.RootURL, nil, manifest)
 	if err != nil {
 		return result, stop("uri", "URI_POLICY_VIOLATION", "sealed root violates URI policy")
 	}
-	queue := []queueItem{{URI: root, Depth: 0}}
+	queue := []queueItem{{RequestURI: root.RequestURI, NormalizedKey: root.NormalizedKey, Depth: 0}}
 	seen := map[string]bool{}
-	inheritedByURI := map[string]string{root: ""}
+	inheritedByURI := map[string]string{root.NormalizedKey: ""}
 	documents := map[string]*rawDocument{}
 	requiredFragments := map[string]map[string]bool{}
 	edges := make([]Edge, 0)
@@ -115,7 +121,7 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 		}
 		item := queue[0]
 		queue = queue[1:]
-		if seen[item.URI] {
+		if seen[item.NormalizedKey] {
 			continue
 		}
 		if item.Depth > manifest.Limits.MaxDepth {
@@ -124,9 +130,9 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 		if len(seen) >= manifest.Limits.MaxDocuments {
 			return result, stop("closure", "DOCUMENT_LIMIT", "document count limit exceeded")
 		}
-		seen[item.URI] = true
+		seen[item.NormalizedKey] = true
 		result.NetworkGetsStarted++
-		doc, tlsPeer, fetchStop := fetchDocument(ctx, item.URI, manifest, credentials, roundTripper)
+		doc, tlsPeer, fetchStop := fetchDocument(ctx, item.RequestURI, manifest, credentials, roundTripper)
 		if fetchStop != nil {
 			return result, fetchStop
 		}
@@ -144,8 +150,8 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 			for index := range doc.Parsed.XSDComponents {
 				if doc.Parsed.XSDComponents[index].Namespace == "" {
 					doc.Parsed.XSDComponents[index].Namespace = item.InheritedXSDNamespace
-					if doc.Parsed.XSDComponents[index].ParentQName != "" && !strings.HasPrefix(doc.Parsed.XSDComponents[index].ParentQName, "{") {
-						doc.Parsed.XSDComponents[index].ParentQName = qname(item.InheritedXSDNamespace, doc.Parsed.XSDComponents[index].ParentQName)
+					if strings.HasPrefix(doc.Parsed.XSDComponents[index].ParentQName, "{}") {
+						doc.Parsed.XSDComponents[index].ParentQName = qname(item.InheritedXSDNamespace, strings.TrimPrefix(doc.Parsed.XSDComponents[index].ParentQName, "{}"))
 					}
 				}
 			}
@@ -159,9 +165,9 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 		if totalBytes > manifest.Limits.MaxTotalBytes {
 			return result, stop("limits", "TOTAL_SIZE_LIMIT", "total raw byte limit exceeded")
 		}
-		doc.ID = documentID(evidenceKey, item.URI)
-		documents[item.URI] = doc
-		if fragments := requiredFragments[item.URI]; len(fragments) > 0 {
+		doc.ID = documentID(evidenceKey, item.NormalizedKey)
+		documents[item.NormalizedKey] = doc
+		if fragments := requiredFragments[item.NormalizedKey]; len(fragments) > 0 {
 			for fragment := range fragments {
 				if !doc.Parsed.IDs[fragment] {
 					return result, stop("xml", "POLICY_FRAGMENT_UNRESOLVED", "policy fragment did not resolve")
@@ -174,7 +180,7 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 			if referenceCount > manifest.Limits.MaxReferences {
 				return result, stop("closure", "REFERENCE_LIMIT", "reference count limit exceeded")
 			}
-			target, fragment, sameDocument, err := resolveReference(item.URI, ref.Raw, manifest)
+			target, fragment, sameDocument, err := resolveReference(item.RequestURI, ref.Raw, manifest)
 			if err != nil {
 				return result, stop("uri", "URI_POLICY_VIOLATION", "document reference violates URI policy")
 			}
@@ -185,25 +191,25 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 				continue
 			}
 			if fragment != "" {
-				if requiredFragments[target] == nil {
-					requiredFragments[target] = map[string]bool{}
+				if requiredFragments[target.NormalizedKey] == nil {
+					requiredFragments[target.NormalizedKey] = map[string]bool{}
 				}
-				requiredFragments[target][fragment] = true
+				requiredFragments[target.NormalizedKey][fragment] = true
 			}
-			targetID := documentID(evidenceKey, target)
+			targetID := documentID(evidenceKey, target.NormalizedKey)
 			edges = append(edges, Edge{FromDocumentID: doc.ID, ToDocumentID: targetID, Relation: ref.Relation})
-			loadedTarget := documents[target]
+			loadedTarget := documents[target.NormalizedKey]
 			if loadedTarget != nil && loadedTarget.Parsed.TargetNamespace != "" {
 				if ref.InheritedXSDNamespace != "" && loadedTarget.Parsed.TargetNamespace != ref.InheritedXSDNamespace {
 					return result, stop("contract", "CONTRACT_CONFLICT", "included XSD target namespace conflicts with its parent schema")
 				}
-			} else if inherited, known := inheritedByURI[target]; known && inherited != ref.InheritedXSDNamespace {
+			} else if inherited, known := inheritedByURI[target.NormalizedKey]; known && inherited != ref.InheritedXSDNamespace {
 				return result, stop("contract", "CONTRACT_CONFLICT", "one XSD document was referenced with conflicting inherited namespaces")
 			} else if !known {
-				inheritedByURI[target] = ref.InheritedXSDNamespace
+				inheritedByURI[target.NormalizedKey] = ref.InheritedXSDNamespace
 			}
-			if !seen[target] {
-				queue = append(queue, queueItem{URI: target, Depth: item.Depth + 1, InheritedXSDNamespace: ref.InheritedXSDNamespace})
+			if !seen[target.NormalizedKey] {
+				queue = append(queue, queueItem{RequestURI: target.RequestURI, NormalizedKey: target.NormalizedKey, Depth: item.Depth + 1, InheritedXSDNamespace: ref.InheritedXSDNamespace})
 			}
 		}
 	}
@@ -243,7 +249,7 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 	}
 	sort.Slice(docEvidence, func(i, j int) bool { return docEvidence[i].DocumentID < docEvidence[j].DocumentID })
 	edges = canonicalEdges(edges)
-	bundle := &Bundle{Complete: true, RootDocumentID: documentID(evidenceKey, root), Documents: docEvidence, Edges: edges, Contract: *contract}
+	bundle := &Bundle{Complete: true, RootDocumentID: documentID(evidenceKey, root.NormalizedKey), Documents: docEvidence, Edges: edges, Contract: *contract}
 	bundleSHA, err := bundleSHA256(bundle.RootDocumentID, bundle.Documents, bundle.Edges)
 	if err != nil {
 		return result, stop("digest", "DIGEST_FAILED", "bundle digest failed")
@@ -353,6 +359,7 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 	childOrder := map[int]int{}
 	schemaTargetAtDepth := map[int]string{}
 	policyDepth := 0
+	redefineDepth := 0
 
 	for {
 		if ctx.Err() != nil {
@@ -539,6 +546,9 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 				}
 			}
 			if value.Name.Space == xsdNamespace {
+				if value.Name.Local == "redefine" {
+					redefineDepth = depth
+				}
 				if value.Name.Local == "element" || value.Name.Local == "complexType" || value.Name.Local == "simpleType" {
 					if name := attribute(value, "name"); name != "" {
 						parentQName := ""
@@ -550,7 +560,7 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 							order = childOrder[parentIndex]
 						}
 						schemaTarget, _ := nearestString(schemaTargetAtDepth, depth)
-						component := XSDComponent{Namespace: schemaTarget, ParentQName: parentQName, Name: name, Kind: value.Name.Local, Order: order, Type: expandQName(attribute(value, "type"), ns), MinOccurs: attributeOr(value, "minOccurs", "1"), MaxOccurs: attributeOr(value, "maxOccurs", "1"), Facets: []XSDFacet{}}
+						component := XSDComponent{Namespace: schemaTarget, ParentQName: parentQName, Name: name, Kind: value.Name.Local, Order: order, Type: expandQName(attribute(value, "type"), ns), MinOccurs: attributeOr(value, "minOccurs", "1"), MaxOccurs: attributeOr(value, "maxOccurs", "1"), Facets: []XSDFacet{}, Redefines: redefineDepth > 0 && depth > redefineDepth}
 						parsed.XSDComponents = append(parsed.XSDComponents, component)
 						componentAtDepth[depth] = len(parsed.XSDComponents) - 1
 					}
@@ -598,6 +608,9 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 			if depth == policyDepth {
 				policyDepth = 0
 			}
+			if depth == redefineDepth {
+				redefineDepth = 0
+			}
 			delete(componentAtDepth, depth)
 			delete(schemaTargetAtDepth, depth)
 			if len(namespaces) > 1 {
@@ -639,6 +652,8 @@ func buildContract(ctx context.Context, manifest Manifest, documents map[string]
 	portTypes := map[string]map[string]operationInfo{}
 	messages := map[string][]MessagePart{}
 	componentIndex := map[string]XSDComponent{}
+	originalComponents := map[string]bool{}
+	redefinedComponents := map[string]bool{}
 	targets := []string{}
 	assertions := []string{}
 	components := []XSDComponent{}
@@ -682,24 +697,50 @@ func buildContract(ctx context.Context, manifest Manifest, documents map[string]
 				targets = append(targets, sanitizeValue(component.Namespace, manifest, key))
 			}
 			componentKey := xsdComponentKey(component)
+			if component.Redefines {
+				if component.ParentQName != "" || (component.Kind != "complexType" && component.Kind != "simpleType") {
+					return nil, stop("contract", "CONTRACT_CONFLICT", "unsupported XSD redefine component")
+				}
+				redefinedComponents[componentKey] = true
+			} else {
+				originalComponents[componentKey] = true
+			}
 			if existing, ok := componentIndex[componentKey]; ok {
-				if !reflect.DeepEqual(existing, component) {
+				if reflect.DeepEqual(existing, component) {
+					continue
+				}
+				if existing.Redefines == component.Redefines {
 					return nil, stop("contract", "CONTRACT_CONFLICT", "XSD component definitions conflict")
+				}
+				if component.Redefines {
+					componentIndex[componentKey] = component
 				}
 				continue
 			}
 			componentIndex[componentKey] = component
-			if component.ParentQName == "" {
-				symbol := qname(component.Namespace, component.Name)
-				if component.Kind == "element" {
-					xsdElements[symbol] = true
-				}
-				if component.Kind == "complexType" || component.Kind == "simpleType" {
-					xsdTypes[symbol] = true
-				}
-			}
-			components = append(components, sanitizeComponents([]XSDComponent{component}, manifest, key)[0])
 		}
+	}
+	for componentKey := range redefinedComponents {
+		if !originalComponents[componentKey] {
+			return nil, stop("contract", "CONTRACT_CONFLICT", "XSD redefine target did not resolve")
+		}
+	}
+	for _, component := range componentIndex {
+		if component.ParentQName == "" {
+			symbol := qname(component.Namespace, component.Name)
+			if component.Kind == "element" {
+				xsdElements[symbol] = true
+			}
+			if component.Kind == "complexType" || component.Kind == "simpleType" {
+				xsdTypes[symbol] = true
+			}
+		}
+	}
+	for _, component := range componentIndex {
+		if component.Type != "" && !xsdTypes[component.Type] && !strings.HasPrefix(component.Type, "{"+xsdNamespace+"}") {
+			return nil, stop("contract", "CONTRACT_MISMATCH", "XSD component type did not resolve in the closure")
+		}
+		components = append(components, sanitizeComponents([]XSDComponent{component}, manifest, key)[0])
 	}
 
 	ports, found := services[manifest.ExpectedServiceQName]
@@ -810,70 +851,78 @@ func xsdComponentKey(component XSDComponent) string {
 	return component.ParentQName + "\x00" + component.Kind + "\x00" + fmt.Sprintf("%08d", component.Order)
 }
 
-func normalizedFetchURI(raw string, base *url.URL, manifest Manifest) (string, error) {
+func resolveFetchURI(raw string, base *url.URL, manifest Manifest) (resolvedURI, error) {
+	empty := resolvedURI{}
 	if hasForbiddenURIText(raw) {
-		return "", fmt.Errorf("forbidden URI text")
+		return empty, fmt.Errorf("forbidden URI text")
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil {
-		return "", err
+		return empty, err
 	}
 	if err := validateEscapedPath(parsed.EscapedPath()); err != nil {
-		return "", err
+		return empty, err
 	}
 	if base != nil {
 		parsed = base.ResolveReference(parsed)
 	}
 	parsed.Fragment = ""
 	if parsed.User != nil || parsed.Host == "" || canonicalOrigin(parsed) != manifest.AllowedOrigin {
-		return "", fmt.Errorf("origin mismatch")
+		return empty, fmt.Errorf("origin mismatch")
 	}
 	if parsed.Scheme != "https" && !(parsed.Scheme == "http" && isLoopbackHost(parsed.Hostname())) {
-		return "", fmt.Errorf("scheme forbidden")
+		return empty, fmt.Errorf("scheme forbidden")
 	}
 	if err := validateEscapedPath(parsed.EscapedPath()); err != nil {
-		return "", fmt.Errorf("path forbidden")
+		return empty, fmt.Errorf("path forbidden")
 	}
+	if err := validateRawQuery(parsed.RawQuery, manifest.SAPClient); err != nil {
+		return empty, err
+	}
+	requestURI := parsed.String()
+	keyURI := *parsed
 	canonicalPath, err := canonicalPercentEncoding(parsed.EscapedPath())
 	if err != nil {
-		return "", fmt.Errorf("path forbidden")
+		return empty, fmt.Errorf("path forbidden")
 	}
 	decodedPath, err := url.PathUnescape(canonicalPath)
 	if err != nil {
-		return "", fmt.Errorf("path forbidden")
+		return empty, fmt.Errorf("path forbidden")
 	}
-	parsed.Path = decodedPath
-	parsed.RawPath = canonicalPath
-	parsed.RawQuery, err = canonicalPercentEncoding(parsed.RawQuery)
-	if err != nil {
-		return "", fmt.Errorf("query forbidden")
+	if decodedPath == "" {
+		decodedPath = "/"
+		canonicalPath = "/"
 	}
+	keyURI.Path = decodedPath
+	keyURI.RawPath = canonicalPath
 	sealedOrigin, err := url.Parse(manifest.AllowedOrigin)
 	if err != nil {
-		return "", fmt.Errorf("origin invalid")
+		return empty, fmt.Errorf("origin invalid")
 	}
-	parsed.Scheme = sealedOrigin.Scheme
-	parsed.Host = sealedOrigin.Host
-	return parsed.String(), nil
+	keyURI.Scheme = sealedOrigin.Scheme
+	keyURI.Host = sealedOrigin.Host
+	return resolvedURI{RequestURI: requestURI, NormalizedKey: keyURI.String()}, nil
 }
 
-func resolveReference(baseURI, raw string, manifest Manifest) (string, string, bool, error) {
+func resolveReference(baseURI, raw string, manifest Manifest) (resolvedURI, string, bool, error) {
+	empty := resolvedURI{}
 	if hasForbiddenURIText(raw) {
-		return "", "", false, fmt.Errorf("forbidden reference")
+		return empty, "", false, fmt.Errorf("forbidden reference")
 	}
 	ref, err := url.Parse(raw)
 	if err != nil {
-		return "", "", false, err
+		return empty, "", false, err
 	}
 	fragment := ref.Fragment
 	if ref.Path == "" && ref.RawQuery == "" && ref.Host == "" && fragment != "" {
-		return baseURI, fragment, true, nil
+		base, err := resolveFetchURI(baseURI, nil, manifest)
+		return base, fragment, true, err
 	}
 	base, err := url.Parse(baseURI)
 	if err != nil {
-		return "", "", false, err
+		return empty, "", false, err
 	}
-	target, err := normalizedFetchURI(raw, base, manifest)
+	target, err := resolveFetchURI(raw, base, manifest)
 	return target, fragment, false, err
 }
 
@@ -904,6 +953,27 @@ func validateEscapedPath(path string) error {
 		if r < 0x20 || r == 0x7f {
 			return fmt.Errorf("path forbidden")
 		}
+	}
+	return nil
+}
+
+func validateRawQuery(rawQuery, sapClient string) error {
+	decoded, err := url.QueryUnescape(rawQuery)
+	if err != nil {
+		return fmt.Errorf("query forbidden")
+	}
+	for _, character := range decoded {
+		if character < 0x20 || character == 0x7f || character == '\\' {
+			return fmt.Errorf("query forbidden")
+		}
+	}
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return fmt.Errorf("query forbidden")
+	}
+	clients, ok := values["sap-client"]
+	if !ok || len(clients) != 1 || clients[0] != sapClient {
+		return fmt.Errorf("sealed SAP client mismatch")
 	}
 	return nil
 }
