@@ -213,7 +213,7 @@ func validateBundle(bundle *Bundle) error {
 		}
 	}
 	for _, component := range contract.XSDComponents {
-		if component.Namespace == "" || component.Name == "" || (component.Kind != "element" && component.Kind != "complexType" && component.Kind != "simpleType") || component.Order < 0 || component.MinOccurs == "" || component.MaxOccurs == "" || component.Facets == nil {
+		if component.Namespace == "" || component.Name == "" || !validXSDComponentKind(component.Kind) || component.Order < 0 || component.MinOccurs == "" || component.MaxOccurs == "" || component.Facets == nil {
 			return fmt.Errorf("XSD component invariant failed")
 		}
 		for _, facet := range component.Facets {
@@ -223,6 +223,15 @@ func validateBundle(bundle *Bundle) error {
 		}
 	}
 	return nil
+}
+
+func validXSDComponentKind(kind string) bool {
+	switch kind {
+	case "element", "complexType", "simpleType", "group", "attributeGroup", "attribute":
+		return true
+	default:
+		return false
+	}
 }
 
 func hmacDigest(key []byte, value string) string {

@@ -150,8 +150,12 @@ func fetchClosure(ctx context.Context, manifest Manifest, credentials Credential
 			for index := range doc.Parsed.XSDComponents {
 				if doc.Parsed.XSDComponents[index].Namespace == "" {
 					doc.Parsed.XSDComponents[index].Namespace = item.InheritedXSDNamespace
-					if strings.HasPrefix(doc.Parsed.XSDComponents[index].ParentQName, "{}") {
-						doc.Parsed.XSDComponents[index].ParentQName = qname(item.InheritedXSDNamespace, strings.TrimPrefix(doc.Parsed.XSDComponents[index].ParentQName, "{}"))
+					doc.Parsed.XSDComponents[index].ParentQName = rebaseEmptyQName(doc.Parsed.XSDComponents[index].ParentQName, item.InheritedXSDNamespace)
+					doc.Parsed.XSDComponents[index].Type = rebaseEmptyQName(doc.Parsed.XSDComponents[index].Type, item.InheritedXSDNamespace)
+					doc.Parsed.XSDComponents[index].RefQName = rebaseEmptyQName(doc.Parsed.XSDComponents[index].RefQName, item.InheritedXSDNamespace)
+					doc.Parsed.XSDComponents[index].RedefinitionRootQName = rebaseEmptyQName(doc.Parsed.XSDComponents[index].RedefinitionRootQName, item.InheritedXSDNamespace)
+					for referenceIndex := range doc.Parsed.XSDComponents[index].TypeReferences {
+						doc.Parsed.XSDComponents[index].TypeReferences[referenceIndex] = rebaseEmptyQName(doc.Parsed.XSDComponents[index].TypeReferences[referenceIndex], item.InheritedXSDNamespace)
 					}
 				}
 			}
@@ -549,8 +553,13 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 				if value.Name.Local == "redefine" {
 					redefineDepth = depth
 				}
-				if value.Name.Local == "element" || value.Name.Local == "complexType" || value.Name.Local == "simpleType" {
-					if name := attribute(value, "name"); name != "" {
+				if isXSDComponentKind(value.Name.Local) {
+					name := attribute(value, "name")
+					refQName := expandQName(attribute(value, "ref"), ns)
+					if name == "" && refQName != "" {
+						name = qnameLocalPart(refQName)
+					}
+					if name != "" {
 						parentQName := ""
 						order := 0
 						if parentIndex, ok := nearestComponent(componentAtDepth, depth); ok {
@@ -560,15 +569,39 @@ func parseXMLDocument(ctx context.Context, body []byte, limits Limits) (parsedDo
 							order = childOrder[parentIndex]
 						}
 						schemaTarget, _ := nearestString(schemaTargetAtDepth, depth)
-						component := XSDComponent{Namespace: schemaTarget, ParentQName: parentQName, Name: name, Kind: value.Name.Local, Order: order, Type: expandQName(attribute(value, "type"), ns), MinOccurs: attributeOr(value, "minOccurs", "1"), MaxOccurs: attributeOr(value, "maxOccurs", "1"), Facets: []XSDFacet{}, Redefines: redefineDepth > 0 && depth > redefineDepth}
+						directRedefinition := redefineDepth > 0 && depth == redefineDepth+1
+						redefinitionRoot := ""
+						if directRedefinition {
+							redefinitionRoot = qname(schemaTarget, name)
+						} else if redefineDepth > 0 {
+							if rootIndex, ok := componentAtDepth[redefineDepth+1]; ok {
+								root := parsed.XSDComponents[rootIndex]
+								redefinitionRoot = qname(root.Namespace, root.Name)
+							}
+						}
+						component := XSDComponent{Namespace: schemaTarget, ParentQName: parentQName, Name: name, Kind: value.Name.Local, Order: order, Type: expandQName(attribute(value, "type"), ns), RefQName: refQName, MinOccurs: attributeOr(value, "minOccurs", "1"), MaxOccurs: attributeOr(value, "maxOccurs", "1"), Facets: []XSDFacet{}, Redefines: directRedefinition, RedefinitionRootQName: redefinitionRoot}
 						parsed.XSDComponents = append(parsed.XSDComponents, component)
 						componentAtDepth[depth] = len(parsed.XSDComponents) - 1
 					}
 				}
-				if value.Name.Local == "restriction" {
+				if value.Name.Local == "restriction" || value.Name.Local == "extension" || value.Name.Local == "list" || value.Name.Local == "union" {
 					if index, ok := nearestComponent(componentAtDepth, depth); ok {
 						component := parsed.XSDComponents[index]
-						component.Type = expandQName(attribute(value, "base"), ns)
+						references := []string{}
+						if base := expandQName(attribute(value, "base"), ns); base != "" {
+							references = append(references, base)
+							component.Type = base
+						}
+						if itemType := expandQName(attribute(value, "itemType"), ns); itemType != "" {
+							references = append(references, itemType)
+							component.Type = itemType
+						}
+						for _, memberType := range strings.Fields(attribute(value, "memberTypes")) {
+							if expanded := expandQName(memberType, ns); expanded != "" {
+								references = append(references, expanded)
+							}
+						}
+						component.TypeReferences = append(component.TypeReferences, references...)
 						parsed.XSDComponents[index] = component
 					}
 				}
@@ -659,6 +692,9 @@ func buildContract(ctx context.Context, manifest Manifest, documents map[string]
 	components := []XSDComponent{}
 	xsdElements := map[string]bool{}
 	xsdTypes := map[string]bool{}
+	xsdGroups := map[string]bool{}
+	xsdAttributeGroups := map[string]bool{}
+	xsdAttributes := map[string]bool{}
 	for _, uri := range sortedDocumentURIs(documents) {
 		if ctx.Err() != nil {
 			return nil, stop("timeout", "WHOLE_ACTION_TIMEOUT", "whole-action timeout reached")
@@ -698,7 +734,7 @@ func buildContract(ctx context.Context, manifest Manifest, documents map[string]
 			}
 			componentKey := xsdComponentKey(component)
 			if component.Redefines {
-				if component.ParentQName != "" || (component.Kind != "complexType" && component.Kind != "simpleType") {
+				if component.ParentQName != "" || (component.Kind != "complexType" && component.Kind != "simpleType" && component.Kind != "group" && component.Kind != "attributeGroup") {
 					return nil, stop("contract", "CONTRACT_CONFLICT", "unsupported XSD redefine component")
 				}
 				redefinedComponents[componentKey] = true
@@ -709,10 +745,12 @@ func buildContract(ctx context.Context, manifest Manifest, documents map[string]
 				if reflect.DeepEqual(existing, component) {
 					continue
 				}
-				if existing.Redefines == component.Redefines {
+				existingIsRedefinition := existing.RedefinitionRootQName != ""
+				componentIsRedefinition := component.RedefinitionRootQName != ""
+				if existingIsRedefinition == componentIsRedefinition {
 					return nil, stop("contract", "CONTRACT_CONFLICT", "XSD component definitions conflict")
 				}
-				if component.Redefines {
+				if componentIsRedefinition {
 					componentIndex[componentKey] = component
 				}
 				continue
@@ -726,19 +764,46 @@ func buildContract(ctx context.Context, manifest Manifest, documents map[string]
 		}
 	}
 	for _, component := range componentIndex {
-		if component.ParentQName == "" {
+		if component.ParentQName == "" && component.RefQName == "" {
 			symbol := qname(component.Namespace, component.Name)
-			if component.Kind == "element" {
+			switch component.Kind {
+			case "element":
 				xsdElements[symbol] = true
-			}
-			if component.Kind == "complexType" || component.Kind == "simpleType" {
+			case "complexType", "simpleType":
 				xsdTypes[symbol] = true
+			case "group":
+				xsdGroups[symbol] = true
+			case "attributeGroup":
+				xsdAttributeGroups[symbol] = true
+			case "attribute":
+				xsdAttributes[symbol] = true
 			}
 		}
 	}
 	for _, component := range componentIndex {
-		if component.Type != "" && !xsdTypes[component.Type] && !strings.HasPrefix(component.Type, "{"+xsdNamespace+"}") {
+		if component.Type != "" && !xsdTypeResolved(component.Type, xsdTypes) {
 			return nil, stop("contract", "CONTRACT_MISMATCH", "XSD component type did not resolve in the closure")
+		}
+		for _, typeReference := range component.TypeReferences {
+			if !xsdTypeResolved(typeReference, xsdTypes) {
+				return nil, stop("contract", "CONTRACT_MISMATCH", "XSD type reference did not resolve in the closure")
+			}
+		}
+		if component.RefQName != "" {
+			resolved := false
+			switch component.Kind {
+			case "element":
+				resolved = xsdElements[component.RefQName]
+			case "group":
+				resolved = xsdGroups[component.RefQName]
+			case "attributeGroup":
+				resolved = xsdAttributeGroups[component.RefQName]
+			case "attribute":
+				resolved = xsdAttributes[component.RefQName]
+			}
+			if !resolved {
+				return nil, stop("contract", "CONTRACT_MISMATCH", "XSD component reference did not resolve in the closure")
+			}
 		}
 		components = append(components, sanitizeComponents([]XSDComponent{component}, manifest, key)[0])
 	}
@@ -802,7 +867,7 @@ func buildContract(ctx context.Context, manifest Manifest, documents map[string]
 			if part.ElementQName != "" && !xsdElements[part.ElementQName] {
 				return nil, stop("contract", "CONTRACT_MISMATCH", "WSDL message part element did not resolve in the XSD closure")
 			}
-			if part.TypeQName != "" && !xsdTypes[part.TypeQName] && !strings.HasPrefix(part.TypeQName, "{"+xsdNamespace+"}") {
+			if part.TypeQName != "" && !xsdTypeResolved(part.TypeQName, xsdTypes) {
 				return nil, stop("contract", "CONTRACT_MISMATCH", "WSDL message part type did not resolve in the XSD closure")
 			}
 			sanitizedParts = append(sanitizedParts, MessagePart{Name: sanitizeValue(part.Name, manifest, key), ElementQName: sanitizeValue(part.ElementQName, manifest, key), TypeQName: sanitizeValue(part.TypeQName, manifest, key)})
@@ -895,6 +960,10 @@ func resolveFetchURI(raw string, base *url.URL, manifest Manifest) (resolvedURI,
 	}
 	keyURI.Path = decodedPath
 	keyURI.RawPath = canonicalPath
+	keyURI.RawQuery, err = canonicalPercentEncoding(parsed.RawQuery)
+	if err != nil {
+		return empty, fmt.Errorf("query forbidden")
+	}
 	sealedOrigin, err := url.Parse(manifest.AllowedOrigin)
 	if err != nil {
 		return empty, fmt.Errorf("origin invalid")
@@ -1096,6 +1165,52 @@ func nearestString(active map[int]string, depth int) (string, bool) {
 	}
 	return value, bestDepth >= 0
 }
+func isXSDComponentKind(local string) bool {
+	switch local {
+	case "element", "complexType", "simpleType", "group", "attributeGroup", "attribute":
+		return true
+	default:
+		return false
+	}
+}
+func qnameLocalPart(value string) string {
+	if closing := strings.LastIndex(value, "}"); closing >= 0 && closing+1 < len(value) {
+		return value[closing+1:]
+	}
+	return value
+}
+func rebaseEmptyQName(value, namespace string) string {
+	if strings.HasPrefix(value, "{}") {
+		return qname(namespace, strings.TrimPrefix(value, "{}"))
+	}
+	return value
+}
+func xsdTypeResolved(value string, declared map[string]bool) bool {
+	if declared[value] {
+		return true
+	}
+	prefix := "{" + xsdNamespace + "}"
+	if !strings.HasPrefix(value, prefix) {
+		return false
+	}
+	return xsd10BuiltinTypes[strings.TrimPrefix(value, prefix)]
+}
+
+var xsd10BuiltinTypes = map[string]bool{
+	"anyType": true, "anySimpleType": true, "string": true, "boolean": true,
+	"decimal": true, "float": true, "double": true, "duration": true,
+	"dateTime": true, "time": true, "date": true, "gYearMonth": true,
+	"gYear": true, "gMonthDay": true, "gDay": true, "gMonth": true,
+	"hexBinary": true, "base64Binary": true, "anyURI": true, "QName": true,
+	"NOTATION": true, "normalizedString": true, "token": true, "language": true,
+	"NMTOKEN": true, "NMTOKENS": true, "Name": true, "NCName": true,
+	"ID": true, "IDREF": true, "IDREFS": true, "ENTITY": true,
+	"ENTITIES": true, "integer": true, "nonPositiveInteger": true, "negativeInteger": true,
+	"long": true, "int": true, "short": true, "byte": true,
+	"nonNegativeInteger": true, "unsignedLong": true, "unsignedInt": true,
+	"unsignedShort": true, "unsignedByte": true, "positiveInteger": true,
+}
+
 func isFacet(local string) bool {
 	switch local {
 	case "length", "minLength", "maxLength", "pattern", "enumeration", "minInclusive", "maxInclusive", "minExclusive", "maxExclusive", "totalDigits", "fractionDigits", "whiteSpace":
@@ -1157,7 +1272,7 @@ func sanitizeComponents(values []XSDComponent, manifest Manifest, key []byte) []
 		for _, facet := range value.Facets {
 			facets = append(facets, XSDFacet{Name: facet.Name, Value: sanitizeValue(facet.Value, manifest, key)})
 		}
-		result = append(result, XSDComponent{Namespace: sanitizeValue(value.Namespace, manifest, key), ParentQName: sanitizeValue(value.ParentQName, manifest, key), Name: sanitizeValue(value.Name, manifest, key), Kind: value.Kind, Order: value.Order, Type: sanitizeValue(value.Type, manifest, key), MinOccurs: value.MinOccurs, MaxOccurs: value.MaxOccurs, Facets: facets})
+		result = append(result, XSDComponent{Namespace: sanitizeValue(value.Namespace, manifest, key), ParentQName: sanitizeValue(value.ParentQName, manifest, key), Name: sanitizeValue(value.Name, manifest, key), Kind: value.Kind, Order: value.Order, Type: sanitizeValue(value.Type, manifest, key), RefQName: sanitizeValue(value.RefQName, manifest, key), MinOccurs: value.MinOccurs, MaxOccurs: value.MaxOccurs, Facets: facets})
 	}
 	return result
 }

@@ -334,7 +334,7 @@ func TestPublishEvidenceHonorsCanceledContextWithoutPublishing(t *testing.T) {
 
 func TestResolvedFetchURIPreservesQueryAndDeduplicatesEscapedUnreservedPath(t *testing.T) {
 	manifest := productionFixtureManifest("https://gpi.invalid/invoice.wsdl?sap-client=100", t.TempDir())
-	plain, err := resolveFetchURI("https://gpi.invalid/invoice.wsdl?sap-client=%31%30%30", nil, manifest)
+	plain, err := resolveFetchURI("https://gpi.invalid/invoice.wsdl?sap-client=100", nil, manifest)
 	if err != nil {
 		t.Fatalf("normalize plain URI: %v", err)
 	}
@@ -342,8 +342,8 @@ func TestResolvedFetchURIPreservesQueryAndDeduplicatesEscapedUnreservedPath(t *t
 	if err != nil {
 		t.Fatalf("normalize escaped URI: %v", err)
 	}
-	if plain.RequestURI != "https://gpi.invalid/invoice.wsdl?sap-client=%31%30%30" {
-		t.Fatalf("request query was rewritten: %q", plain.RequestURI)
+	if plain.RequestURI != "https://gpi.invalid/invoice.wsdl?sap-client=100" || escaped.RequestURI != "https://gpi.invalid/%69nvoice.wsdl?sap-client=%31%30%30" {
+		t.Fatalf("request URI was rewritten: plain=%q escaped=%q", plain.RequestURI, escaped.RequestURI)
 	}
 	if plain.NormalizedKey != escaped.NormalizedKey {
 		t.Fatalf("equivalent URIs did not deduplicate: plain=%q escaped=%q", plain, escaped)
@@ -402,6 +402,34 @@ func TestServiceHardStopsWhenReferencedXSDElementTypeDoesNotResolve(t *testing.T
 		t.Fatalf("fetch: %v", err)
 	}
 	assertHardStop(t, result, "CONTRACT_MISMATCH", true, 1)
+}
+
+func TestServiceHardStopsOnEveryUnresolvedXSDReferenceForm(t *testing.T) {
+	tests := []struct {
+		name     string
+		fragment string
+	}{
+		{"extension base", `<xsd:complexType name="T"><xsd:complexContent><xsd:extension base="tns:MissingType"/></xsd:complexContent></xsd:complexType>`},
+		{"list item type", `<xsd:simpleType name="T"><xsd:list itemType="tns:MissingType"/></xsd:simpleType>`},
+		{"union member type", `<xsd:simpleType name="T"><xsd:union memberTypes="xsd:string tns:MissingType"/></xsd:simpleType>`},
+		{"element ref", `<xsd:complexType name="T"><xsd:sequence><xsd:element ref="tns:MissingElement"/></xsd:sequence></xsd:complexType>`},
+		{"group ref", `<xsd:complexType name="T"><xsd:sequence><xsd:group ref="tns:MissingGroup"/></xsd:sequence></xsd:complexType>`},
+		{"unknown builtin", `<xsd:element name="E" type="xsd:MissingType"/>`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			schema := `<wsdl:types><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:employee-shop:invoice">` + tc.fragment + `</xsd:schema></wsdl:types>`
+			wsdl := strings.Replace(minimalWSDL(), `<wsdl:message name="InvoiceRequest"/>`, schema+`<wsdl:message name="InvoiceRequest"/>`, 1)
+			service, input := fixtureService(t, &fixtureLedger{}, func(context.Context, Manifest) (http.RoundTripper, error) {
+				return roundTripFunc(responseRoundTrip(http.StatusOK, "application/xml", wsdl)), nil
+			}, nil)
+			result, err := service.Fetch(context.Background(), inputArgs(input))
+			if err != nil {
+				t.Fatalf("fetch: %v", err)
+			}
+			assertHardStop(t, result, "CONTRACT_MISMATCH", true, 1)
+		})
+	}
 }
 
 func TestStrictTransportConfiguresEveryNetworkTimeoutAndDisablesAutomaticBehavior(t *testing.T) {

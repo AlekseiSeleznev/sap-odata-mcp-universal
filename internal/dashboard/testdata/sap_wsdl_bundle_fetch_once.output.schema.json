@@ -108,9 +108,10 @@
                       "namespace": {"type": "string"},
                       "parent_qname": {"type": "string"},
                       "name": {"type": "string"},
-                      "kind": {"type": "string", "enum": ["element", "complexType", "simpleType"]},
+                      "kind": {"type": "string", "enum": ["element", "complexType", "simpleType", "group", "attributeGroup", "attribute"]},
                       "order": {"type": "integer", "minimum": 0},
                       "type": {"type": "string"},
+                      "ref_qname": {"type": "string"},
                       "min_occurs": {"type": "string"},
                       "max_occurs": {"type": "string"},
                       "facets": {
@@ -126,7 +127,7 @@
                         }
                       }
                     },
-                    "required": ["namespace", "parent_qname", "name", "kind", "order", "type", "min_occurs", "max_occurs", "facets"],
+                    "required": ["namespace", "parent_qname", "name", "kind", "order", "type", "ref_qname", "min_occurs", "max_occurs", "facets"],
                     "additionalProperties": false
                   }
                 },
