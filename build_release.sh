@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # Build release binaries for OData MCP Bridge v1.5.1
 
 VERSION="v1.5.1"
@@ -7,6 +9,9 @@ BINARY_NAME="sap-odata-mcp-universal"
 BUILD_DIR="dist"
 
 echo "Building OData MCP Bridge ${VERSION} binaries..."
+
+# Darwin release artifacts require the Go linker LC_UUID load command.
+bash "$(dirname "${BASH_SOURCE[0]}")/scripts/require-go-toolchain.sh" go
 
 # Clean previous builds
 rm -rf ${BUILD_DIR}
