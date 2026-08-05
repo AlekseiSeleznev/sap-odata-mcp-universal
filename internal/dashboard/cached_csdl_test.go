@@ -50,18 +50,60 @@ func TestCachedCSDLSummaryToolIsDocumentedAndFailsClosedOnCacheMiss(t *testing.T
 	}
 
 	var found bool
+	var cachedOutputSchema map[string]interface{}
 	for _, tool := range listResult.Tools {
 		if tool.Name != cachedCSDLSummaryToolName {
 			continue
 		}
 		found = true
+		cachedOutputSchema = tool.OutputSchema
 		if tool.OutputSchema["type"] != "object" {
 			t.Fatalf("missing object outputSchema: %#v", tool.OutputSchema)
+		}
+		properties, ok := tool.OutputSchema["properties"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("outputSchema properties missing: %#v", tool.OutputSchema)
+		}
+		functionImports, ok := properties["function_imports"].(map[string]interface{})
+		if !ok || functionImports["type"] != "array" {
+			t.Fatalf("function_imports outputSchema missing: %#v", properties["function_imports"])
+		}
+		items, ok := functionImports["items"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("function_imports item schema missing: %#v", functionImports)
+		}
+		if items["type"] != "object" || items["additionalProperties"] != false {
+			t.Fatalf("function_imports item schema is not strict: %#v", items)
+		}
+		assertSchemaRequiredFields(t, items, []string{"name", "http_method", "return_type", "parameter_count", "is_action"})
+		itemProperties, ok := items["properties"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("function_imports item properties missing: %#v", items)
+		}
+		expectedTypes := map[string]string{
+			"name":            "string",
+			"http_method":     "string",
+			"return_type":     "string",
+			"parameter_count": "integer",
+			"is_action":       "boolean",
+		}
+		for field, expectedType := range expectedTypes {
+			fieldSchema, ok := itemProperties[field].(map[string]interface{})
+			if !ok || fieldSchema["type"] != expectedType {
+				t.Fatalf("function_imports item field %q has wrong schema: %#v", field, itemProperties[field])
+			}
+			if field == "parameter_count" && fieldSchema["minimum"] != float64(0) {
+				t.Fatalf("parameter_count must have minimum 0: %#v", fieldSchema)
+			}
 		}
 	}
 	if !found {
 		t.Fatalf("tool %q was not listed", cachedCSDLSummaryToolName)
 	}
+	if cachedOutputSchema["additionalProperties"] != false {
+		t.Fatalf("cached summary output schema is not strict: %#v", cachedOutputSchema)
+	}
+	assertSchemaRequiredFields(t, cachedOutputSchema, []string{"digest_sha256", "version", "schema_namespace", "container_name", "entity_sets", "function_imports"})
 
 	callResponse := handleMCPRequest(t, odataBridge, "tools/call", map[string]interface{}{
 		"name": cachedCSDLSummaryToolName,
@@ -75,6 +117,27 @@ func TestCachedCSDLSummaryToolIsDocumentedAndFailsClosedOnCacheMiss(t *testing.T
 	}
 	if !strings.Contains(strings.ToLower(string(callResponse.Error.Data)), "cached metadata unavailable") {
 		t.Fatalf("unexpected cache miss error: %+v", callResponse.Error)
+	}
+}
+
+func assertSchemaRequiredFields(t *testing.T, schema map[string]interface{}, expected []string) {
+	t.Helper()
+	values, ok := schema["required"].([]interface{})
+	if !ok {
+		t.Fatalf("schema required fields missing: %#v", schema)
+	}
+	actual := make(map[string]bool, len(values))
+	for _, value := range values {
+		name, ok := value.(string)
+		if !ok {
+			t.Fatalf("schema required field is not a string: %#v", value)
+		}
+		actual[name] = true
+	}
+	for _, name := range expected {
+		if !actual[name] {
+			t.Fatalf("schema required field %q missing: %#v", name, values)
+		}
 	}
 }
 
@@ -145,6 +208,26 @@ func TestCachedCSDLSummaryPublicSeamUsesInMemoryFixture(t *testing.T) {
 				Properties:    []*models.EntityProperty{{Name: "ID", Type: "Edm.String", IsKey: true, Nullable: false}},
 			},
 		},
+		FunctionImports: map[string]*models.FunctionImport{
+			"z_action": {
+				Name:       "ZAction",
+				HTTPMethod: "POST",
+				ReturnType: "Edm.Boolean",
+				Parameters: []*models.FunctionParameter{
+					{Name: "credential-like-parameter", Type: "Edm.String"},
+				},
+				IsAction: true,
+			},
+			"a_function": {
+				Name:       "AFunction",
+				HTTPMethod: "GET",
+				ReturnType: "Edm.String",
+				Parameters: []*models.FunctionParameter{
+					{Name: "raw-secret-name", Type: "Edm.String"},
+					{Name: "raw-secret-type", Type: "Edm.Int32"},
+				},
+			},
+		},
 	}
 	runtime.mu.Unlock()
 
@@ -158,6 +241,66 @@ func TestCachedCSDLSummaryPublicSeamUsesInMemoryFixture(t *testing.T) {
 	result := callCachedCSDLSummary(t, odataBridge)
 	if len(result.EntitySets) != 1 || result.EntitySets[0].Name != "SalesOrderSet" {
 		t.Fatalf("unexpected in-memory fixture result: %#v", result)
+	}
+	if len(result.FunctionImports) != 2 {
+		t.Fatalf("function imports missing from cached summary: %#v", result.FunctionImports)
+	}
+	if result.FunctionImports[0].Name != "AFunction" || result.FunctionImports[1].Name != "ZAction" {
+		t.Fatalf("function imports are not sorted by name: %#v", result.FunctionImports)
+	}
+	if result.FunctionImports[0].HTTPMethod != "GET" || result.FunctionImports[0].ReturnType != "Edm.String" || result.FunctionImports[0].ParameterCount != 2 || result.FunctionImports[0].IsAction {
+		t.Fatalf("unexpected function contract: %#v", result.FunctionImports[0])
+	}
+	if result.FunctionImports[1].HTTPMethod != "POST" || result.FunctionImports[1].ReturnType != "Edm.Boolean" || result.FunctionImports[1].ParameterCount != 1 || !result.FunctionImports[1].IsAction {
+		t.Fatalf("unexpected action contract: %#v", result.FunctionImports[1])
+	}
+	firstDigest := result.DigestSHA256
+	runtime.mu.Lock()
+	runtime.metadataCache["fixture"].FunctionImports = map[string]*models.FunctionImport{
+		"a_function": {
+			Name:       "AFunction",
+			HTTPMethod: "GET",
+			ReturnType: "Edm.String",
+			Parameters: []*models.FunctionParameter{
+				{Name: "raw-secret-name", Type: "Edm.String"},
+				{Name: "raw-secret-type", Type: "Edm.Int32"},
+			},
+		},
+		"z_action": {
+			Name:       "ZAction",
+			HTTPMethod: "POST",
+			ReturnType: "Edm.Boolean",
+			Parameters: []*models.FunctionParameter{
+				{Name: "credential-like-parameter", Type: "Edm.String"},
+			},
+			IsAction: true,
+		},
+	}
+	runtime.mu.Unlock()
+	second := callCachedCSDLSummary(t, odataBridge)
+	if second.DigestSHA256 != firstDigest {
+		t.Fatalf("digest changed after equivalent function map reconstruction: first=%q second=%q", firstDigest, second.DigestSHA256)
+	}
+	runtime.mu.Lock()
+	runtime.metadataCache["fixture"].FunctionImports["m_function"] = &models.FunctionImport{
+		Name:       "MFunction",
+		HTTPMethod: "GET",
+		ReturnType: "Edm.Int64",
+	}
+	runtime.mu.Unlock()
+	third := callCachedCSDLSummary(t, odataBridge)
+	if third.DigestSHA256 == firstDigest {
+		t.Fatalf("digest did not change after function import contract change: digest=%q", third.DigestSHA256)
+	}
+
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("encode summary: %v", err)
+	}
+	for _, forbidden := range []string{"credential-like-parameter", "raw-secret-name", "raw-secret-type", "Edm.Int32"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("summary leaked forbidden function metadata %q: %s", forbidden, encoded)
+		}
 	}
 }
 
@@ -234,6 +377,9 @@ func TestCachedCSDLSummaryReturnsSanitizedDeterministicFacetsWithoutNetwork(t *t
 	if first.DigestSHA256 == "" || first.DigestSHA256 != second.DigestSHA256 {
 		t.Fatalf("digest is empty or unstable: first=%q second=%q", first.DigestSHA256, second.DigestSHA256)
 	}
+	if first.FunctionImports == nil {
+		t.Fatal("backward-compatible empty function_imports must be an array")
+	}
 	if first.Version != "1.0" || first.SchemaNamespace != "ZMCP_SO_SALES_ORDER_1C_RU_SRV" {
 		t.Fatalf("unexpected metadata identity: %#v", first)
 	}
@@ -273,6 +419,7 @@ type decodedCachedCSDLSummary struct {
 	SchemaNamespace string                       `json:"schema_namespace"`
 	ContainerName   string                       `json:"container_name"`
 	EntitySets      []decodedCachedCSDLEntitySet `json:"entity_sets"`
+	FunctionImports []decodedCachedCSDLFunction  `json:"function_imports"`
 }
 
 type decodedCachedCSDLEntitySet struct {
@@ -290,6 +437,14 @@ type decodedCachedCSDLProperty struct {
 	MaxLength string `json:"max_length"`
 	Precision string `json:"precision"`
 	Scale     string `json:"scale"`
+}
+
+type decodedCachedCSDLFunction struct {
+	Name           string `json:"name"`
+	HTTPMethod     string `json:"http_method"`
+	ReturnType     string `json:"return_type"`
+	ParameterCount int    `json:"parameter_count"`
+	IsAction       bool   `json:"is_action"`
 }
 
 func callCachedCSDLSummary(t *testing.T, odataBridge *bridge.ODataMCPBridge) decodedCachedCSDLSummary {

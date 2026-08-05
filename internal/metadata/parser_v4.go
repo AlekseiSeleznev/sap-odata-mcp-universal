@@ -27,6 +27,7 @@ type DataServicesV4 struct {
 type SchemaV4 struct {
 	XMLName          xml.Name            `xml:"Schema"`
 	Namespace        string              `xml:"Namespace,attr"`
+	Alias            string              `xml:"Alias,attr"`
 	EntityTypes      []EntityTypeV4      `xml:"EntityType"`
 	ComplexTypes     []ComplexTypeV4     `xml:"ComplexType"`
 	EnumTypes        []EnumTypeV4        `xml:"EnumType"`
@@ -272,7 +273,11 @@ func ParseMetadataV4(data []byte, serviceRoot string) (*models.ODataMetadata, er
 
 	// Parse function imports
 	for _, fi := range mainContainer.FunctionImports {
-		functionImport := parseFunctionImportV4(fi, mainSchema.Functions)
+		functionSchema := schemaForV4Operation(fi.Function, mainSchema.Namespace, edmx.DataServices.Schemas)
+		if functionSchema == nil {
+			continue
+		}
+		functionImport := parseFunctionImportV4(fi, functionSchema.Functions)
 		if functionImport != nil {
 			metadata.FunctionImports[fi.Name] = functionImport
 		}
@@ -280,13 +285,32 @@ func ParseMetadataV4(data []byte, serviceRoot string) (*models.ODataMetadata, er
 
 	// Parse action imports as function imports (for compatibility)
 	for _, ai := range mainContainer.ActionImports {
-		actionImport := parseActionImportV4(ai, mainSchema.Actions)
+		actionSchema := schemaForV4Operation(ai.Action, mainSchema.Namespace, edmx.DataServices.Schemas)
+		if actionSchema == nil {
+			continue
+		}
+		actionImport := parseActionImportV4(ai, actionSchema.Actions)
 		if actionImport != nil {
 			metadata.FunctionImports[ai.Name] = actionImport
 		}
 	}
 
 	return metadata, nil
+}
+
+// schemaForV4Operation resolves the namespace portion of an operation import
+// without allowing a same-named operation in another schema to be selected.
+func schemaForV4Operation(reference, defaultNamespace string, schemas []SchemaV4) *SchemaV4 {
+	namespace := defaultNamespace
+	if separator := strings.LastIndex(reference, "."); separator > 0 {
+		namespace = reference[:separator]
+	}
+	for i := range schemas {
+		if schemas[i].Namespace == namespace || schemas[i].Alias == namespace {
+			return &schemas[i]
+		}
+	}
+	return nil
 }
 
 // parseEntityTypeV4 converts XML entity type to model for OData v4
@@ -447,6 +471,7 @@ func parseActionImportV4(ai ActionImportV4, actions []ActionV4) *models.Function
 		Name:       ai.Name,
 		HTTPMethod: "POST", // Actions are always POST in OData v4
 		Parameters: make([]*models.FunctionParameter, 0),
+		IsAction:   true,
 	}
 
 	// Parse return type

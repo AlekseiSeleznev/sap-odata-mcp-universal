@@ -20,7 +20,7 @@ const cachedSummaryToolName = "odata_cached_csdl_summary"
 func (r *HierarchicalRuntime) registerCachedCSDLSummaryTool() {
 	r.bridge.GetServer().AddTool(&mcp.Tool{
 		Name:        cachedSummaryToolName,
-		Description: "Return a sanitized cached CSDL contract: SHA-256 digest, version, EntitySet to EntityType mappings, keys, and property types/facets. Reads runtime memory only and never performs an OData or network request.",
+		Description: "Return a sanitized cached CSDL contract: SHA-256 digest, version, EntitySet to EntityType mappings, keys, property types/facets, and deterministic function import summaries. Reads runtime memory only and never performs an OData or network request.",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -123,6 +123,18 @@ func cachedCSDLSummaryOutputSchema() map[string]interface{} {
 		"required":             []string{"name", "type", "nullable", "is_key"},
 		"additionalProperties": false,
 	}
+	functionImportSchema := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"name":            map[string]interface{}{"type": "string"},
+			"http_method":     map[string]interface{}{"type": "string"},
+			"return_type":     map[string]interface{}{"type": "string"},
+			"parameter_count": map[string]interface{}{"type": "integer", "minimum": 0},
+			"is_action":       map[string]interface{}{"type": "boolean"},
+		},
+		"required":             []string{"name", "http_method", "return_type", "parameter_count", "is_action"},
+		"additionalProperties": false,
+	}
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -144,8 +156,12 @@ func cachedCSDLSummaryOutputSchema() map[string]interface{} {
 					"additionalProperties": false,
 				},
 			},
+			"function_imports": map[string]interface{}{
+				"type":  "array",
+				"items": functionImportSchema,
+			},
 		},
-		"required":             []string{"digest_sha256", "version", "schema_namespace", "container_name", "entity_sets"},
+		"required":             []string{"digest_sha256", "version", "schema_namespace", "container_name", "entity_sets", "function_imports"},
 		"additionalProperties": false,
 	}
 }
@@ -167,11 +183,20 @@ type cachedCSDLEntitySet struct {
 	Properties []cachedCSDLProperty `json:"properties"`
 }
 
+type cachedCSDLFunctionImport struct {
+	Name           string `json:"name"`
+	HTTPMethod     string `json:"http_method"`
+	ReturnType     string `json:"return_type"`
+	ParameterCount int    `json:"parameter_count"`
+	IsAction       bool   `json:"is_action"`
+}
+
 type cachedCSDLPayload struct {
-	Version         string                `json:"version"`
-	SchemaNamespace string                `json:"schema_namespace"`
-	ContainerName   string                `json:"container_name"`
-	EntitySets      []cachedCSDLEntitySet `json:"entity_sets"`
+	Version         string                     `json:"version"`
+	SchemaNamespace string                     `json:"schema_namespace"`
+	ContainerName   string                     `json:"container_name"`
+	EntitySets      []cachedCSDLEntitySet      `json:"entity_sets"`
+	FunctionImports []cachedCSDLFunctionImport `json:"function_imports"`
 }
 
 type cachedCSDLSummary struct {
@@ -189,6 +214,7 @@ func buildCachedCSDLSummary(ctx context.Context, metadata *models.ODataMetadata)
 		SchemaNamespace: metadata.SchemaNamespace,
 		ContainerName:   metadata.ContainerName,
 		EntitySets:      make([]cachedCSDLEntitySet, 0, len(metadata.EntitySets)),
+		FunctionImports: make([]cachedCSDLFunctionImport, 0, len(metadata.FunctionImports)),
 	}
 	entitySetNames := make([]string, 0, len(metadata.EntitySets))
 	for name := range metadata.EntitySets {
@@ -239,6 +265,44 @@ func buildCachedCSDLSummary(ctx context.Context, metadata *models.ODataMetadata)
 			Properties: properties,
 		})
 	}
+
+	functionImportNames := make([]string, 0, len(metadata.FunctionImports))
+	for name := range metadata.FunctionImports {
+		functionImportNames = append(functionImportNames, name)
+	}
+	sort.Strings(functionImportNames)
+	for _, name := range functionImportNames {
+		if err := contextError(ctx); err != nil {
+			return nil, err
+		}
+		functionImport := metadata.FunctionImports[name]
+		if functionImport == nil {
+			return nil, fmt.Errorf("cached metadata has an empty function import %q", name)
+		}
+		payload.FunctionImports = append(payload.FunctionImports, cachedCSDLFunctionImport{
+			Name:           functionImport.Name,
+			HTTPMethod:     functionImport.HTTPMethod,
+			ReturnType:     functionImport.ReturnType,
+			ParameterCount: len(functionImport.Parameters),
+			IsAction:       functionImport.IsAction,
+		})
+	}
+	sort.SliceStable(payload.FunctionImports, func(i, j int) bool {
+		left, right := payload.FunctionImports[i], payload.FunctionImports[j]
+		if left.Name != right.Name {
+			return left.Name < right.Name
+		}
+		if left.HTTPMethod != right.HTTPMethod {
+			return left.HTTPMethod < right.HTTPMethod
+		}
+		if left.ReturnType != right.ReturnType {
+			return left.ReturnType < right.ReturnType
+		}
+		if left.ParameterCount != right.ParameterCount {
+			return left.ParameterCount < right.ParameterCount
+		}
+		return !left.IsAction && right.IsAction
+	})
 
 	if err := contextError(ctx); err != nil {
 		return nil, err

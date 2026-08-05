@@ -278,3 +278,74 @@ func TestParseMetadata_V4_SearchRestrictions(t *testing.T) {
 	// Orders should not be searchable (no annotation, defaults to false)
 	assert.False(t, result.EntitySets["Orders"].Searchable, "Orders should default to not searchable")
 }
+
+func TestParseMetadata_V4_ActionImportPreservesActionKind(t *testing.T) {
+	metadata := `<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="4.0" xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx">
+  <edmx:DataServices>
+    <Schema Namespace="TestService" xmlns="http://docs.oasis-open.org/odata/ns/edm">
+      <Action Name="ArchiveOrder" IsBound="false">
+        <Parameter Name="order_id" Type="Edm.Int32" Nullable="false"/>
+        <ReturnType Type="Edm.Boolean"/>
+      </Action>
+      <EntityContainer Name="Container">
+        <ActionImport Name="Archive" Action="TestService.ArchiveOrder"/>
+      </EntityContainer>
+    </Schema>
+  </edmx:DataServices>
+</edmx:Edmx>`
+
+	result, err := ParseMetadata([]byte(metadata), "http://example.com/odata")
+	require.NoError(t, err)
+	action, ok := result.FunctionImports["Archive"]
+	require.True(t, ok)
+	assert.True(t, action.IsAction)
+	assert.Equal(t, "POST", action.HTTPMethod)
+	assert.Equal(t, "Edm.Boolean", action.ReturnType)
+	assert.Len(t, action.Parameters, 1)
+}
+
+func TestParseMetadata_V4_ImportsResolveDefinitionsAcrossSchemas(t *testing.T) {
+	metadata := `<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="4.0" xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx">
+  <edmx:DataServices>
+    <Schema Namespace="MainService" xmlns="http://docs.oasis-open.org/odata/ns/edm">
+      <Function Name="Run" IsBound="false">
+        <ReturnType Type="Edm.Boolean"/>
+      </Function>
+      <Action Name="Archive" IsBound="false">
+        <ReturnType Type="Edm.String"/>
+      </Action>
+      <EntityContainer Name="Container">
+        <FunctionImport Name="ExternalRun" Function="Ext.Run"/>
+        <ActionImport Name="ExternalArchive" Action="Ext.Archive"/>
+      </EntityContainer>
+    </Schema>
+    <Schema Namespace="ExternalService" Alias="Ext" xmlns="http://docs.oasis-open.org/odata/ns/edm">
+      <Function Name="Run" IsBound="false">
+        <Parameter Name="external_id" Type="Edm.Int32" Nullable="false"/>
+        <ReturnType Type="Edm.Int64"/>
+      </Function>
+      <Action Name="Archive" IsBound="false">
+        <Parameter Name="external_id" Type="Edm.Int32" Nullable="false"/>
+        <ReturnType Type="Edm.Boolean"/>
+      </Action>
+    </Schema>
+  </edmx:DataServices>
+</edmx:Edmx>`
+
+	result, err := ParseMetadata([]byte(metadata), "http://example.com/odata")
+	require.NoError(t, err)
+
+	functionImport, ok := result.FunctionImports["ExternalRun"]
+	require.True(t, ok)
+	assert.Equal(t, "Edm.Int64", functionImport.ReturnType)
+	assert.Len(t, functionImport.Parameters, 1)
+
+	actionImport, ok := result.FunctionImports["ExternalArchive"]
+	require.True(t, ok)
+	assert.True(t, actionImport.IsAction)
+	assert.Equal(t, "POST", actionImport.HTTPMethod)
+	assert.Equal(t, "Edm.Boolean", actionImport.ReturnType)
+	assert.Len(t, actionImport.Parameters, 1)
+}
