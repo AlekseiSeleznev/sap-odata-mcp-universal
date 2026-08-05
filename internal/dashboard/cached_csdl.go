@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/mcp"
 	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
@@ -32,7 +34,10 @@ func (r *HierarchicalRuntime) registerCachedCSDLSummaryTool() {
 	}, r.cachedCSDLSummaryHandler)
 }
 
-func (r *HierarchicalRuntime) cachedCSDLSummaryHandler(_ context.Context, args map[string]interface{}) (interface{}, error) {
+func (r *HierarchicalRuntime) cachedCSDLSummaryHandler(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+	if err := contextError(ctx); err != nil {
+		return nil, err
+	}
 	systemID, _ := args["system_id"].(string)
 	serviceID, _ := args["service_id"].(string)
 	systemID = strings.TrimSpace(systemID)
@@ -41,15 +46,20 @@ func (r *HierarchicalRuntime) cachedCSDLSummaryHandler(_ context.Context, args m
 		return nil, fmt.Errorf("system_id and service_id are required")
 	}
 
-	metadata, err := r.cachedMetadata(systemID, serviceID)
+	metadata, err := r.cachedMetadata(ctx, systemID, serviceID)
 	if err != nil {
 		return nil, err
 	}
-	return buildCachedCSDLSummary(metadata)
+	if err := contextError(ctx); err != nil {
+		return nil, err
+	}
+	return buildCachedCSDLSummary(ctx, metadata)
 }
 
-func (r *HierarchicalRuntime) cachedMetadata(systemID, serviceID string) (*models.ODataMetadata, error) {
-	r.mu.Lock()
+func (r *HierarchicalRuntime) cachedMetadata(ctx context.Context, systemID, serviceID string) (*models.ODataMetadata, error) {
+	if err := lockRuntimeWithContext(ctx, &r.mu); err != nil {
+		return nil, err
+	}
 	defer r.mu.Unlock()
 	key, ok := r.serviceCacheKeys[serviceBindingKey(systemID, serviceID)]
 	if !ok {
@@ -60,6 +70,38 @@ func (r *HierarchicalRuntime) cachedMetadata(systemID, serviceID string) (*model
 		return nil, fmt.Errorf("cached metadata unavailable; activation is required")
 	}
 	return metadata, nil
+}
+
+func contextError(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return nil
+	}
+}
+
+func lockRuntimeWithContext(ctx context.Context, mu *sync.Mutex) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	for {
+		if mu.TryLock() {
+			return nil
+		}
+		timer := time.NewTimer(time.Millisecond)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func serviceBindingKey(systemID, serviceID string) string {
@@ -137,7 +179,7 @@ type cachedCSDLSummary struct {
 	cachedCSDLPayload
 }
 
-func buildCachedCSDLSummary(metadata *models.ODataMetadata) (*cachedCSDLSummary, error) {
+func buildCachedCSDLSummary(ctx context.Context, metadata *models.ODataMetadata) (*cachedCSDLSummary, error) {
 	if metadata == nil {
 		return nil, fmt.Errorf("cached metadata unavailable")
 	}
@@ -155,6 +197,9 @@ func buildCachedCSDLSummary(metadata *models.ODataMetadata) (*cachedCSDLSummary,
 	sort.Strings(entitySetNames)
 
 	for _, name := range entitySetNames {
+		if err := contextError(ctx); err != nil {
+			return nil, err
+		}
 		entitySet := metadata.EntitySets[name]
 		if entitySet == nil {
 			return nil, fmt.Errorf("cached metadata has an empty entity set %q", name)
@@ -168,6 +213,9 @@ func buildCachedCSDLSummary(metadata *models.ODataMetadata) (*cachedCSDLSummary,
 		sort.Strings(keys)
 		properties := make([]cachedCSDLProperty, 0, len(entityType.Properties))
 		for _, property := range entityType.Properties {
+			if err := contextError(ctx); err != nil {
+				return nil, err
+			}
 			if property == nil {
 				continue
 			}
@@ -192,6 +240,9 @@ func buildCachedCSDLSummary(metadata *models.ODataMetadata) (*cachedCSDLSummary,
 		})
 	}
 
+	if err := contextError(ctx); err != nil {
+		return nil, err
+	}
 	canonical, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("encode sanitized CSDL summary: %w", err)
