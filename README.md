@@ -211,8 +211,8 @@ go build -o sap-odata-mcp-universal ./cmd/sap-odata-mcp-universal
 ```bash
 GOOS=linux GOARCH=amd64 go build -o sap-odata-mcp-universal-linux-amd64 ./cmd/sap-odata-mcp-universal
 GOOS=windows GOARCH=amd64 go build -o sap-odata-mcp-universal-windows-amd64.exe ./cmd/sap-odata-mcp-universal
-GOOS=darwin GOARCH=amd64 go build -o sap-odata-mcp-universal-darwin-amd64 ./cmd/sap-odata-mcp-universal
-GOOS=darwin GOARCH=arm64 go build -o sap-odata-mcp-universal-darwin-arm64 ./cmd/sap-odata-mcp-universal
+# Darwin: guarded target, requires Go 1.24+ for the macOS LC_UUID linker command
+make build-macos
 ```
 
 ### Makefile

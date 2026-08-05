@@ -9,6 +9,7 @@ BINARY_NAME="sap-odata-mcp-universal"
 MAIN_PATH="cmd/sap-odata-mcp-universal/main.go"
 VERSION=${VERSION:-"1.0.0"}
 BUILD_DIR="build"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Colors for output
 RED='\033[0;31m'
@@ -71,6 +72,10 @@ check_go() {
     log_info "Using $(go version)"
 }
 
+check_darwin_toolchain() {
+    bash "$SCRIPT_DIR/scripts/require-go-toolchain.sh" go
+}
+
 # Download dependencies
 deps() {
     log_info "Downloading dependencies..."
@@ -81,6 +86,10 @@ deps() {
 # Build for current platform
 build_current() {
     log_info "Building $BINARY_NAME for current platform..."
+
+    if [ "$(go env GOOS)" = "darwin" ]; then
+        check_darwin_toolchain
+    fi
     
     COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
     BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -128,6 +137,7 @@ build_windows() {
 # Build for macOS
 build_macos() {
     log_info "Building $BINARY_NAME for macOS (amd64 and arm64)..."
+    check_darwin_toolchain
     mkdir -p $BUILD_DIR
     
     COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -188,6 +198,17 @@ run() {
 # Main script logic
 main() {
     check_go
+
+    case "${1:-build}" in
+        "build"|"")
+            if [ "$(go env GOOS)" = "darwin" ]; then
+                check_darwin_toolchain
+            fi
+            ;;
+        "macos"|"all")
+            check_darwin_toolchain
+            ;;
+    esac
     
     case "${1:-build}" in
         "build"|"")

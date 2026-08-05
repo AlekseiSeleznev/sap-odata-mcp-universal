@@ -8,9 +8,11 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/bridge"
 	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/config"
+	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/models"
 	"github.com/AlekseiSeleznev/sap-odata-mcp-universal/internal/transport"
 )
 
@@ -22,6 +24,15 @@ func TestCachedCSDLSummaryToolIsDocumentedAndFailsClosedOnCacheMiss(t *testing.T
 		t.Fatalf("create bridge: %v", err)
 	}
 	NewHierarchicalRuntime(odataBridge, config.Config{})
+
+	initializeResponse := handleMCPRequest(t, odataBridge, "initialize", map[string]interface{}{
+		"protocolVersion": "2025-06-18",
+		"capabilities":    map[string]interface{}{},
+		"clientInfo":      map[string]interface{}{"name": "offline-fixture", "version": "test"},
+	})
+	if initializeResponse.Error != nil {
+		t.Fatalf("initialize returned error: %+v", initializeResponse.Error)
+	}
 
 	listResponse := handleMCPRequest(t, odataBridge, "tools/list", nil)
 	if listResponse.Error != nil {
@@ -64,6 +75,89 @@ func TestCachedCSDLSummaryToolIsDocumentedAndFailsClosedOnCacheMiss(t *testing.T
 	}
 	if !strings.Contains(strings.ToLower(string(callResponse.Error.Data)), "cached metadata unavailable") {
 		t.Fatalf("unexpected cache miss error: %+v", callResponse.Error)
+	}
+}
+
+func TestCachedCSDLSummaryHonorsRequestCancellationWhileRuntimeIsBusy(t *testing.T) {
+	odataBridge, err := bridge.NewODataMCPBridge(&config.Config{})
+	if err != nil {
+		t.Fatalf("create bridge: %v", err)
+	}
+	runtime := NewHierarchicalRuntime(odataBridge, config.Config{})
+
+	locked := make(chan struct{})
+	unlock := make(chan struct{})
+	go func() {
+		runtime.mu.Lock()
+		close(locked)
+		<-unlock
+		runtime.mu.Unlock()
+	}()
+	<-locked
+	defer close(unlock)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	paramsJSON, err := json.Marshal(map[string]interface{}{
+		"name": cachedCSDLSummaryToolName,
+		"arguments": map[string]interface{}{
+			"system_id":  "gpi-100",
+			"service_id": "sales-order",
+		},
+	})
+	if err != nil {
+		t.Fatalf("encode params: %v", err)
+	}
+
+	response, err := odataBridge.GetServer().HandleMessage(ctx, &transport.Message{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage("1"),
+		Method:  "tools/call",
+		Params:  paramsJSON,
+	})
+	if err != nil {
+		t.Fatalf("handle tools/call: %v", err)
+	}
+	if response.Error == nil || !strings.Contains(strings.ToLower(string(response.Error.Data)), "deadline exceeded") {
+		t.Fatalf("expected bounded cancellation error, got %+v", response)
+	}
+}
+
+func TestCachedCSDLSummaryPublicSeamUsesInMemoryFixture(t *testing.T) {
+	odataBridge, err := bridge.NewODataMCPBridge(&config.Config{})
+	if err != nil {
+		t.Fatalf("create bridge: %v", err)
+	}
+	runtime := NewHierarchicalRuntime(odataBridge, config.Config{})
+	runtime.mu.Lock()
+	runtime.serviceCacheKeys[serviceBindingKey("gpi-100", "sales-order")] = "fixture"
+	runtime.metadataCache["fixture"] = &models.ODataMetadata{
+		Version:         "1.0",
+		SchemaNamespace: "Fixture.Service",
+		ContainerName:   "FixtureContainer",
+		EntitySets: map[string]*models.EntitySet{
+			"SalesOrderSet": {Name: "SalesOrderSet", EntityType: "Fixture.Service.SalesOrder"},
+		},
+		EntityTypes: map[string]*models.EntityType{
+			"Fixture.Service.SalesOrder": {
+				Name:          "SalesOrder",
+				KeyProperties: []string{"ID"},
+				Properties:    []*models.EntityProperty{{Name: "ID", Type: "Edm.String", IsKey: true, Nullable: false}},
+			},
+		},
+	}
+	runtime.mu.Unlock()
+
+	if response := handleMCPRequest(t, odataBridge, "initialize", map[string]interface{}{}); response.Error != nil {
+		t.Fatalf("initialize returned error: %+v", response.Error)
+	}
+	listResponse := handleMCPRequest(t, odataBridge, "tools/list", nil)
+	if listResponse.Error != nil || !strings.Contains(string(listResponse.Result), cachedCSDLSummaryToolName) {
+		t.Fatalf("tools/list did not expose cached summary: %+v", listResponse)
+	}
+	result := callCachedCSDLSummary(t, odataBridge)
+	if len(result.EntitySets) != 1 || result.EntitySets[0].Name != "SalesOrderSet" {
+		t.Fatalf("unexpected in-memory fixture result: %#v", result)
 	}
 }
 

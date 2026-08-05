@@ -6,6 +6,7 @@ BINARY_NAME=sap-odata-mcp-universal
 MAIN_PATH=cmd/sap-odata-mcp-universal/main.go
 BUILD_DIR=build
 DIST_DIR=dist
+GO ?= go
 
 # Add .exe extension on Windows
 ifeq ($(OS),Windows_NT)
@@ -30,7 +31,9 @@ endif
 COMMIT?=$(GIT_COMMIT_SHORT)
 BUILD_TIME?=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# Go build flags
+# Go build flags. Darwin executables must be built with Go 1.24+ so the linker
+# emits the LC_UUID load command required by current macOS dyld. The Darwin
+# target checks this requirement; go.mod retains the 1.21 language floor.
 LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.Commit=$(COMMIT) -X main.BuildTime=$(BUILD_TIME) -w -s"
 GCFLAGS=-gcflags="all=-trimpath=$(PWD)"
 ASMFLAGS=-asmflags="all=-trimpath=$(PWD)"
@@ -89,7 +92,8 @@ help:
 .PHONY: build
 build: deps
 	@echo "Building $(BINARY_NAME) for current platform..."
-	go build $(LDFLAGS) $(GCFLAGS) $(ASMFLAGS) -o $(BINARY_NAME)$(BINARY_EXT) $(MAIN_PATH)
+	@if [ "$$($(GO) env GOOS)" = "darwin" ]; then bash scripts/require-go-toolchain.sh "$(GO)"; fi
+	$(GO) build $(LDFLAGS) $(GCFLAGS) $(ASMFLAGS) -o $(BINARY_NAME)$(BINARY_EXT) $(MAIN_PATH)
 	@echo "✅ Build complete: $(BINARY_NAME)$(BINARY_EXT)"
 
 # Cross-compilation targets
@@ -108,20 +112,24 @@ build-windows: deps
 	@echo "✅ Windows build complete: $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe"
 
 .PHONY: build-macos
-build-macos: deps
+build-macos: check-darwin-toolchain deps
 	@echo "Building $(BINARY_NAME) for macOS (amd64 and arm64)..."
 	@mkdir -p $(BUILD_DIR)
-	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) $(GCFLAGS) $(ASMFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 $(MAIN_PATH)
-	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) $(GCFLAGS) $(ASMFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 $(MAIN_PATH)
+	GOOS=darwin GOARCH=amd64 $(GO) build $(LDFLAGS) $(GCFLAGS) $(ASMFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 $(MAIN_PATH)
+	GOOS=darwin GOARCH=arm64 $(GO) build $(LDFLAGS) $(GCFLAGS) $(ASMFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 $(MAIN_PATH)
 	@echo "✅ macOS builds complete:"
 	@echo "   $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64"
 	@echo "   $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64"
 
 # Build for all platforms
 .PHONY: build-all
-build-all: build-linux build-windows build-macos
+build-all: check-darwin-toolchain build-linux build-windows build-macos
 	@echo "✅ All platform builds complete!"
 	@ls -la $(BUILD_DIR)/
+
+.PHONY: check-darwin-toolchain
+check-darwin-toolchain:
+	bash scripts/require-go-toolchain.sh "$(GO)"
 
 # Build for all platforms with WSL integration (copies Windows binary to /mnt/c/bin)
 .PHONY: build-all-wsl
@@ -325,7 +333,8 @@ check:
 # Quick development iteration
 .PHONY: quick
 quick:
-	go build -o $(BINARY_NAME)$(BINARY_EXT) $(MAIN_PATH) && ./$(BINARY_NAME)$(BINARY_EXT) --help
+	@if [ "$$($(GO) env GOOS)" = "darwin" ]; then bash scripts/require-go-toolchain.sh "$(GO)"; fi
+	$(GO) build -o $(BINARY_NAME)$(BINARY_EXT) $(MAIN_PATH) && ./$(BINARY_NAME)$(BINARY_EXT) --help
 
 # Create a new release (requires gh CLI)
 .PHONY: release

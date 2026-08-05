@@ -28,9 +28,23 @@ import (
 
 var cfg *config.Config
 
+// These values are populated by release builds through -ldflags. Defaults keep
+// local and source builds deterministic without reading configuration or using
+// the network.
+var (
+	Version   = "dev"
+	Commit    = "unknown"
+	BuildTime = "unknown"
+)
+
+func versionString() string {
+	return fmt.Sprintf("%s (commit %s, built %s)", Version, Commit, BuildTime)
+}
+
 var rootCmd = &cobra.Command{
-	Use:   "sap-odata-mcp-universal [service-url]",
-	Short: "sap-odata-mcp-universal - SAP OData to MCP bridge",
+	Use:     "sap-odata-mcp-universal [service-url]",
+	Short:   "sap-odata-mcp-universal - SAP OData to MCP bridge",
+	Version: versionString(),
 	Long: `sap-odata-mcp-universal - SAP OData to MCP bridge.
 
 This tool creates a bridge between SAP OData v2 services and the Model Context Protocol
@@ -50,7 +64,9 @@ Operation Filtering Examples:
 	RunE: runBridge,
 }
 
-func init() {
+func configureCLI() {
+	rootCmd.SetVersionTemplate("{{printf \"%s\\n\" .Version}}")
+
 	// Load .env file if it exists (ignore error if file not found)
 	_ = godotenv.Load()
 
@@ -625,10 +641,25 @@ func printTraceInfo(bridge *bridge.ODataMCPBridge) error {
 }
 
 func main() {
+	if wantsVersion(os.Args[1:]) {
+		fmt.Println(versionString())
+		return
+	}
+	configureCLI()
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "\n--- FATAL ERROR ---\n")
 		fmt.Fprintf(os.Stderr, "An unexpected error occurred: %v\n", err)
 		fmt.Fprintf(os.Stderr, "-------------------\n")
 		os.Exit(1)
 	}
+}
+
+func wantsVersion(args []string) bool {
+	for _, arg := range args {
+		if arg == "--version" {
+			return true
+		}
+	}
+	return false
 }
